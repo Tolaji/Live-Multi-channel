@@ -1,0 +1,98 @@
+live-multi-channel/
+├── frontend/
+│   ├── public/
+│   │   ├── index.html
+│   │   ├── manifest.json
+│   │   ├── service-worker.js
+│   │   ├── logo192.png
+│   │   └── logo512.png
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Auth/
+│   │   │   │   ├── LoginScreen.jsx
+│   │   │   │   ├── APIKeySetup.jsx
+│   │   │   │   └── ModeSelector.jsx
+│   │   │   ├── Dashboard/
+│   │   │   │   ├── Dashboard.jsx
+│   │   │   │   ├── Sidebar.jsx
+│   │   │   │   ├── ChannelList.jsx
+│   │   │   │   ├── ChannelItem.jsx
+│   │   │   │   └── QuotaMonitor.jsx
+│   │   │   ├── Player/
+│   │   │   │   ├── LivePlayer.jsx
+│   │   │   │   ├── VideoEmbed.jsx
+│   │   │   │   └── LiveChat.jsx
+│   │   │   ├── Notifications/
+│   │   │   │   ├── NotificationBell.jsx
+│   │   │   │   └── NotificationList.jsx
+│   │   │   ├── ErrorBoundary.jsx
+│   │   │   ├── Toast.jsx
+│   │   │   └── ThemeToggle.jsx
+│   │   ├── hooks/
+│   │   │   ├── useAuth.js
+│   │   │   ├── useLiveStatus.js
+│   │   │   ├── useNotifications.js
+│   │   │   ├── useKeyboardShortcuts.js
+│   │   │   └── useAnalytics.js
+│   │   ├── services/
+│   │   │   ├── apiClient.js
+│   │   │   ├── userKeyService.js
+│   │   │   ├── rssService.js
+│   │   │   ├── websocketClient.js
+│   │   │   └── storage.js
+│   │   ├── utils/
+│   │   │   ├── encryption.js
+│   │   │   ├── apiKeyValidator.js
+│   │   │   ├── sanitize.js
+│   │   │   └── security.js
+│   │   ├── App.jsx
+│   │   ├── main.js
+│   │   └── registerServiceWorker.js
+│   ├── .env.example
+│   ├── package.json
+│   ├── vite.config.js
+│   └── tailwind.config.js
+│
+├── backend/
+│   ├── config/
+│   │   ├── database.js
+│   │   ├── redis.js
+│   │   └── oauth.js
+│   ├── middleware/
+│   │   ├── security.js
+│   │   ├── csrf.js
+│   │   └── auth.js
+│   ├── routes/
+│   │   ├── auth.js
+│   │   ├── api.js
+│   │   ├── webhooks.js
+│   │   └── health.js
+│   ├── services/
+│   │   ├── rssFeedService.js
+│   │   ├── youtubeService.js
+│   │   ├── notificationService.js
+│   │   └── tokenService.js
+│   ├── workers/
+│   │   ├── fallbackPolling.js
+│   │   └── subscriptionRenewal.js
+│   ├── migrations/
+│   │   ├── 001_initial_schema.js
+│   │   └── 002_add_indexes.js
+│   ├── .env.example
+│   ├── package.json
+│   └── server.js
+│
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── API.md
+│   ├── DEPLOYMENT.md
+│   └── TROUBLESHOOTING.md
+│
+├── scripts/
+│   ├── deploy.sh
+│   ├── monitor.sh
+│   └── backup.sh
+│
+├── .gitignore
+├── README.md
+└── LICENSE

@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "VITE_BACKEND_URL": "https://your-backend.render.com"
+  }
+}
