@@ -6,7 +6,10 @@ dotenv.config();
 const { Pool } = pg;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
+  // Add connection timeout and keep it open for multiple operations
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
 });
 
 async function runMigrations() {
@@ -28,6 +31,8 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key TEXT;
+      CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key) WHERE api_key IS NOT NULL;
     `);
     console.log('✅ Created users table');
     
@@ -71,15 +76,20 @@ async function runMigrations() {
         channel_id VARCHAR(255) NOT NULL,
         video_id VARCHAR(255) UNIQUE NOT NULL,
         title TEXT,
+        description TEXT,
+        thumbnail_url TEXT,
         started_at TIMESTAMP DEFAULT NOW(),
         ended_at TIMESTAMP,
         peak_viewers INTEGER,
-        checked_at TIMESTAMP DEFAULT NOW()
+        average_viewers INTEGER,
+        checked_at TIMESTAMP DEFAULT NOW(),
+        is_active BOOLEAN DEFAULT TRUE
       );
       
       CREATE INDEX IF NOT EXISTS idx_live_events_channel_id ON live_events(channel_id);
       CREATE INDEX IF NOT EXISTS idx_live_events_video_id ON live_events(video_id);
       CREATE INDEX IF NOT EXISTS idx_live_events_started_at ON live_events(started_at);
+      CREATE INDEX IF NOT EXISTS idx_live_events_is_active ON live_events(is_active);
     `);
     console.log('✅ Created live_events table');
     
@@ -91,6 +101,7 @@ async function runMigrations() {
         channel_id VARCHAR(255) NOT NULL,
         video_id VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
+        notification_type VARCHAR(50) DEFAULT 'live_start', -- live_start, live_end, highlight, etc.
         read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
@@ -98,9 +109,60 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
       CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+      CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(notification_type);
     `);
     console.log('✅ Created notifications table');
+
+    // Quota usage table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS quota_usage (
+        id SERIAL PRIMARY KEY,
+        endpoint VARCHAR(255) NOT NULL,
+        cost INTEGER NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        timestamp TIMESTAMP DEFAULT NOW(),
+        date DATE NOT NULL
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_quota_usage_date ON quota_usage(date);
+      CREATE INDEX IF NOT EXISTS idx_quota_usage_user_id ON quota_usage(user_id);
+      CREATE INDEX IF NOT EXISTS idx_quota_usage_endpoint ON quota_usage(endpoint);
+      CREATE INDEX IF NOT EXISTS idx_quota_usage_timestamp ON quota_usage(timestamp);
+    `);
+    console.log('✅ Created quota_usage table');
     
+    // User settings table (optional but useful)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_settings (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        email_notifications BOOLEAN DEFAULT TRUE,
+        push_notifications BOOLEAN DEFAULT TRUE,
+        notification_sound BOOLEAN DEFAULT TRUE,
+        theme VARCHAR(20) DEFAULT 'light',
+        language VARCHAR(10) DEFAULT 'en',
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('✅ Created user_settings table');
+
+    // Add role column to users table for admin functionality
+    await client.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user'
+    `);
+    console.log('✅ Added role column to users table');
+
+    // Add default admin user if specified in env (optional)
+    if (process.env.DEFAULT_ADMIN_EMAIL) {
+      await client.query(`
+        INSERT INTO users (google_id, email, name, role) 
+        VALUES ('admin_default', $1, 'System Admin', 'admin')
+        ON CONFLICT (google_id) DO UPDATE SET role = 'admin'
+      `, [process.env.DEFAULT_ADMIN_EMAIL]);
+      console.log('✅ Created default admin user');
+    }
+
     await client.query('COMMIT');
     console.log('🎉 All migrations completed successfully!');
     
@@ -114,4 +176,31 @@ async function runMigrations() {
   }
 }
 
-runMigrations().catch(console.error);
+// Add function to check if migrations are needed
+async function checkMigrations() {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'users'
+      );
+    `);
+    return result.rows[0].exists;
+  } catch (error) {
+    console.error('Error checking migrations:', error);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
+
+
+// Make it runnable directly or importable
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runMigrations().catch(console.error);
+}
+
+export { runMigrations, checkMigrations };

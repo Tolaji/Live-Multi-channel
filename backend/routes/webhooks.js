@@ -1,7 +1,7 @@
 // backend/routes/webhooks.js
-
 import express from 'express';
 import crypto from 'crypto';
+import db from '../config/database.js';
 import { parseStringPromise } from 'xml2js';
 import { checkIfVideoIsLive } from '../services/youtubeService.js';
 import { notifyUsers } from '../services/notificationService.js';
@@ -66,23 +66,27 @@ async function processRSSNotification(xmlBody) {
     if (liveStatus.isLive) {
       console.log(`Video ${videoId} is LIVE!`);
       
-      // Update cache
-      await redis.setex(
-        `live:${channelId}`,
-        300, // 5 min TTL
-        JSON.stringify({
-          videoId,
-          title,
-          isLive: true,
-          checkedAt: new Date().toISOString()
-        })
-      );
+      // Note: Redis cache update commented since we're using session Redis client
+      // It can be uncommented back when a separate Redis client for cache is available
+      // await redis.setex(
+      //   `live:${channelId}`,
+      //   300, // 5 min TTL
+      //   JSON.stringify({
+      //     videoId,
+      //     title,
+      //     isLive: true,
+      //     checkedAt: new Date().toISOString()
+      //   })
+      // );
       
       // Notify users tracking this channel
       await notifyUsers(channelId, {
         videoId,
         title,
-        channelId
+        channelId,
+        thumbnailUrl: liveStatus.thumbnailUrl,
+        viewerCount: liveStatus.viewerCount,
+        startedAt: liveStatus.startedAt
       });
       
       // Store event in DB

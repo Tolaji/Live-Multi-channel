@@ -2,9 +2,11 @@
 
 import express from 'express';
 import { subscribeToChannel, unsubscribeFromChannel } from '../services/rssFeedService.js';
-import { checkIfVideoIsLive } from '../services/youtubeService.js';
+import { searchChannelForLiveStreams } from '../services/youtubeService.js';
 import db from '../config/database.js';
-import redis from '../config/redis.js';
+// import redis from '../config/redis.js';
+import { createClient } from 'redis'; 
+
 
 const router = express.Router();
 
@@ -125,16 +127,20 @@ router.get('/channels/tracked', requireAuth, async (req, res) => {
 router.get('/channels/:channelId/live-status', requireAuth, async (req, res) => {
   try {
     const { channelId } = req.params;
+    const liveStatus = await searchChannelForLiveStreams(channelId);
+
     
-    // Check cache first
-    const cached = await redis.get(`live:${channelId}`);
-    if (cached) {
-      return res.json(JSON.parse(cached));
-    }
+    // For now, return offline status since we don't have Redis cache
+    // Real checks happen via RSS webhooks or fallback polling
+    // const cached = await redis.get(`live:${channelId}`);
+    // if (cached) {
+    //   return res.json(JSON.parse(cached));
+    // }
     
     // If not in cache, return offline status
     // (Real checks happen via RSS webhooks or fallback polling)
-    res.json({ isLive: false });
+    // res.json({ isLive: false });
+    res.json(liveStatus);
     
   } catch (error) {
     console.error('Error checking live status:', error);
@@ -148,10 +154,10 @@ router.get('/chat/:videoId/messages', requireAuth, async (req, res) => {
     const { videoId } = req.params;
     
     // Check cache first
-    const cached = await redis.get(`chat:${videoId}`);
-    if (cached) {
-      return res.json(JSON.parse(cached));
-    }
+    // const cached = await redis.get(`chat:${videoId}`);
+    // if (cached) {
+    //   return res.json(JSON.parse(cached));
+    // }
     
     // Fetch live chat ID
     const response = await fetch(
@@ -239,6 +245,38 @@ router.post('/notifications/mark-read', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error marking notifications as read:', error);
     res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
+});
+
+
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
+});
+await redisClient.connect(); // Only if not already connected elsewhere
+
+// Redis test endpoint
+router.get('/test/redis', async (req, res) => {
+  try {
+    await redisClient.set('test-key', 'test-value', { EX: 5 });
+    const value = await redisClient.get('test-key');
+    res.json({ success: true, value });
+  } catch (error) {
+    res.status(500).json({ error: 'Redis test failed' });
+  }
+});
+
+// Test endpoint
+router.get('/test', (req, res) => {
+  res.json({ success: true, message: 'API test endpoint working!' });
+});
+
+// Database test endpoint
+router.get('/test/db', async (req, res) => {
+  try {
+    const result = await db.query('SELECT NOW()');
+    res.json({ success: true, dbTime: result.rows[0].now });
+  } catch (error) {
+    res.status(500).json({ error: 'Database test failed' });
   }
 });
 

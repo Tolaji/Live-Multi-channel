@@ -1,5 +1,6 @@
 // backend/services/rssFeedService.js
 
+import db from '../config/database.js';
 import axios from 'axios';
 import crypto from 'crypto';
 
@@ -59,3 +60,9 @@ export async function unsubscribeFromChannel(channelId) {
   
   await db.query('DELETE FROM rss_subscriptions WHERE channel_id = $1', [channelId]);
 }
+
+// Add to youtubeService.js and rssFeedService.js
+const retryConfig = {
+  retries: 3,
+  retryDelay: (retryCount) => Math.pow(2, retryCount) * 1000
+};

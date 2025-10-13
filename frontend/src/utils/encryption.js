@@ -1,27 +1,30 @@
-// utils/encryption.js
+// Client-side encryption for secure transmission (optional)
+// Note: For maximum security, consider end-to-end encryption
+// This is a basic example using base64 encoding
 
-import CryptoJS from 'crypto-js';
-
-const ENCRYPTION_KEY = 'user-device-fingerprint'; // Generated per-device
-
-export function encryptAPIKey(apiKey) {
-  return CryptoJS.AES.encrypt(apiKey, ENCRYPTION_KEY).toString();
+export function encryptForTransmission(data) {
+  // Simple base64 encoding for demo
+  // In production, use proper encryption for sensitive data
+  return btoa(JSON.stringify(data))
 }
 
-export function decryptAPIKey(encryptedKey) {
-  const bytes = CryptoJS.AES.decrypt(encryptedKey, ENCRYPTION_KEY);
-  return bytes.toString(CryptoJS.enc.Utf8);
+export function decryptReceivedData(encryptedData) {
+  try {
+    return JSON.parse(atob(encryptedData))
+  } catch {
+    return null
+  }
 }
 
-// Storage wrapper
-export async function storeAPIKey(apiKey) {
-  const encrypted = encryptAPIKey(apiKey);
-  const db = await openDB('liveMultiChannel', 1);
-  await db.put('settings', { key: 'apiKey', value: encrypted });
-}
-
-export async function retrieveAPIKey() {
-  const db = await openDB('liveMultiChannel', 1);
-  const record = await db.get('settings', 'apiKey');
-  return record ? decryptAPIKey(record.value) : null;
+// Optional: Generate a device fingerprint for additional security
+export function generateDeviceFingerprint() {
+  const components = [
+    navigator.userAgent,
+    navigator.language,
+    screen.colorDepth,
+    `${screen.width}x${screen.height}`,
+    new Date().getTimezoneOffset()
+  ]
+  
+  return btoa(components.join('|'))
 }

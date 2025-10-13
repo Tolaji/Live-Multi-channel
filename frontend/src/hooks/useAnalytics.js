@@ -1,7 +1,5 @@
 // hooks/useAnalytics.js
 
-import { useEffect } from 'react';
-
 export function useAnalytics() {
   const trackEvent = (category, action, label, value) => {
     // Send to backend for logging
@@ -16,7 +14,7 @@ export function useAnalytics() {
         value,
         timestamp: new Date().toISOString()
       })
-    }).catch(console.error);
+    }).catch(console.error)
     
     // Also send to Google Analytics if configured
     if (window.gtag) {
@@ -24,40 +22,26 @@ export function useAnalytics() {
         event_category: category,
         event_label: label,
         value: value
-      });
+      })
     }
-  };
+  }
   
   const trackPageView = (path) => {
-    trackEvent('Navigation', 'page_view', path);
-  };
+    trackEvent('Navigation', 'page_view', path)
+  }
   
   const trackChannelView = (channelId, channelTitle) => {
-    trackEvent('Channel', 'view', channelTitle);
-  };
+    trackEvent('Channel', 'view', channelTitle)
+  }
   
   const trackLiveStreamWatch = (videoId, channelTitle, duration) => {
-    trackEvent('Stream', 'watch', channelTitle, duration);
-  };
+    trackEvent('Stream', 'watch', channelTitle, duration)
+  }
   
   return {
     trackEvent,
     trackPageView,
     trackChannelView,
     trackLiveStreamWatch
-  };
-}
-
-// Usage
-function Dashboard() {
-  const { trackPageView, trackChannelView } = useAnalytics();
-  
-  useEffect(() => {
-    trackPageView('/dashboard');
-  }, []);
-  
-  const handleChannelClick = (channel) => {
-    trackChannelView(channel.channelId, channel.channelTitle);
-    // ... rest of logic
-  };
+  }
 }

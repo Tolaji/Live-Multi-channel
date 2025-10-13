@@ -38,17 +38,3 @@ export function useKeyboardShortcuts(handlers) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlers]);
 }
-
-// Usage in Dashboard component
-function Dashboard() {
-  useKeyboardShortcuts({
-    openSearch: () => setShowSearch(true),
-    refresh: () => refreshLiveStatus(),
-    toggleChat: () => setShowChat(prev => !prev),
-    closeModals: () => setShowModals(false),
-    previousChannel: () => navigateChannel(-1),
-    nextChannel: () => navigateChannel(1)
-  });
-  
-  // ... rest of component
-}

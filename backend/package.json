@@ -7,6 +7,9 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:migrate": "node migrations/run.js",
+    "db:constraints": "node migrations/constraintsAndFunctions.js",
+    "db:setup": "npm run db:migrate && npm run db:constraints",
+    "db:reset": "node migrations/reset.js",
     "db:seed": "node migrations/seed.js"
   },
   "keywords": [],
@@ -16,6 +19,7 @@
   "dependencies": {
     "axios": "^1.12.2",
     "connect-redis": "^9.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csurf": "^1.11.0",
     "dotenv": "^17.2.3",
