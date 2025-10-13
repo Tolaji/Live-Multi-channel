@@ -11,8 +11,10 @@ class APIClient {
   async initialize() {
     if (this.isInitialized) return this.mode
 
+    console.log('[APIClient] Starting initialization...')
+
     try {
-      // Try user key first
+      // Try user key first (local storage)
       const userKeyMode = await userKeyService.initialize()
       if (userKeyMode) {
         this.mode = 'user-key'
@@ -21,7 +23,9 @@ class APIClient {
         return this.mode
       }
 
-      // Try RSS mode
+      console.log('[APIClient] User key not available, trying RSS mode...')
+
+      // Try RSS mode (backend session)
       const rssMode = await rssClient.initialize()
       if (rssMode) {
         this.mode = 'rss'
@@ -30,8 +34,10 @@ class APIClient {
         return this.mode
       }
 
+      console.log('[APIClient] No authentication mode available')
       this.isInitialized = true
       return null
+      
     } catch (error) {
       console.error('[APIClient] Initialization failed:', error)
       this.isInitialized = false
@@ -40,20 +46,26 @@ class APIClient {
   }
 
   async checkChannelLiveStatus(channelId) {
+    await this.ensureInitialized()
+    
     if (this.mode === 'user-key') {
       return await userKeyService.checkChannelLiveStatus(channelId)
     } else if (this.mode === 'rss') {
       return await rssClient.checkChannelLiveStatus(channelId)
     }
+    
     throw new Error('No authentication mode available')
   }
 
   async fetchSubscriptions() {
+    await this.ensureInitialized()
+    
     if (this.mode === 'user-key') {
       return await userKeyService.fetchSubscriptions()
     } else if (this.mode === 'rss') {
       return await rssClient.fetchTrackedChannels()
     }
+    
     throw new Error('No authentication mode available')
   }
 
@@ -69,6 +81,16 @@ class APIClient {
       throw new Error('Channel tracking only available in RSS mode')
     }
     return await rssClient.removeChannel(channelId)
+  }
+
+  async ensureInitialized() {
+    if (!this.isInitialized) {
+      await this.initialize()
+    }
+    
+    if (!this.mode) {
+      throw new Error('Application not properly initialized')
+    }
   }
 
   isUserKeyMode() {

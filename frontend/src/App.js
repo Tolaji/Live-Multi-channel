@@ -9,6 +9,7 @@ export class App {
   constructor() {
     this.mode = null
     this.loading = true
+    this.initializationError = null
     this.router = new Router()
   }
 
@@ -21,8 +22,12 @@ export class App {
 
   async initializeApp() {
     try {
+      console.log('[App] Starting application initialization...')
       this.mode = await apiClient.initialize()
-    } catch {
+      console.log('[App] Initialization completed, mode:', this.mode)
+    } catch (error) {
+      console.error('[App] Initialization failed:', error)
+      this.initializationError = error.message
       toast('Failed to initialize application', 'error')
     } finally {
       this.loading = false
@@ -37,6 +42,11 @@ export class App {
   handleRoute() {
     if (this.loading) {
       this.renderLoading()
+      return
+    }
+
+    if (this.initializationError) {
+      this.renderError()
       return
     }
 
@@ -55,6 +65,24 @@ export class App {
         <div class="text-center">
           <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500 mx-auto mb-4"></div>
           <p>Initializing application...</p>
+        </div>
+      </div>
+    `
+  }
+
+  renderError() {
+    this.container.innerHTML = `
+      <div class="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
+        <div class="max-w-md text-center">
+          <h1 class="text-2xl font-bold mb-4">Initialization Error</h1>
+          <p class="text-gray-400 mb-4">Failed to initialize the application:</p>
+          <p class="text-red-400 mb-6">${this.initializationError}</p>
+          <button
+            onclick="window.location.reload()"
+            class="px-4 py-2 bg-orange-500 rounded hover:bg-orange-600"
+          >
+            Retry
+          </button>
         </div>
       </div>
     `

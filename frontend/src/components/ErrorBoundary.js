@@ -26,26 +26,8 @@ export class ErrorBoundary {
     this.errorInfo = errorInfo
     this.render()
 
-    // Log to backend
-    this.logError(error, errorInfo)
-  }
-
-  async logError(error, errorInfo) {
-    try {
-      await fetch('/api/errors/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: error.toString(),
-          errorInfo,
-          userAgent: navigator.userAgent,
-          url: window.location.href,
-          timestamp: new Date().toISOString()
-        })
-      })
-    } catch (error) {
-      console.error('Failed to log error:', error)
-    }
+    // Log to console instead of backend since endpoint doesn't exist
+    console.error('Application Error:', error, errorInfo)
   }
 
   render() {
