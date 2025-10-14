@@ -1,23 +1,33 @@
 // backend/migrations/constraintsAndFunctions.js
 import pg from 'pg';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const { Pool } = pg;
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
 });
 
-async function addConstraintsAndFunctions() {
+async function runConstraintsAndFunctions() {
   const client = await pool.connect();
-  
+
   try {
     console.log('🔧 Adding database constraints and functions...');
-    
-    await client.query('BEGIN');
 
-    // Function to update updated_at timestamp
+    // ✅ Ensure is_active column exists before creating functions
+    await client.query(`
+      ALTER TABLE live_events
+      ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;
+    `);
+    console.log('✅ Ensured live_events.is_active column exists');
+
+    // 🔹 1. Trigger function to update updated_at
     await client.query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
       RETURNS TRIGGER AS $$
@@ -25,11 +35,11 @@ async function addConstraintsAndFunctions() {
         NEW.updated_at = NOW();
         RETURN NEW;
       END;
-      $$ language 'plpgsql';
+      $$ LANGUAGE plpgsql;
     `);
     console.log('✅ Created update_updated_at_column function');
 
-    // Trigger for users table
+    // 🔹 2. Trigger on users table
     await client.query(`
       DROP TRIGGER IF EXISTS update_users_updated_at ON users;
       CREATE TRIGGER update_users_updated_at
@@ -39,23 +49,22 @@ async function addConstraintsAndFunctions() {
     `);
     console.log('✅ Created update_users_updated_at trigger');
 
-    // Function to clean up old notifications
+    // 🔹 3. Cleanup old notifications (example: older than 30 days)
     await client.query(`
       CREATE OR REPLACE FUNCTION cleanup_old_notifications()
-      RETURNS void AS $$
+      RETURNS VOID AS $$
       BEGIN
-        DELETE FROM notifications 
-        WHERE created_at < NOW() - INTERVAL '30 days'
-        AND read = true;
+        DELETE FROM notifications
+        WHERE created_at < NOW() - INTERVAL '30 days';
       END;
-      $$ language 'plpgsql';
+      $$ LANGUAGE plpgsql;
     `);
     console.log('✅ Created cleanup_old_notifications function');
 
-    // Function to get user channel stats
+    // 🔹 4. Get user channel stats (fixed version)
     await client.query(`
-      CREATE OR REPLACE FUNCTION get_user_channel_stats(user_id_param INTEGER)
-      RETURNS TABLE(
+      CREATE OR REPLACE FUNCTION get_user_channel_stats(user_id_param INT)
+      RETURNS TABLE (
         total_channels BIGINT,
         live_channels BIGINT,
         total_notifications BIGINT,
@@ -63,49 +72,41 @@ async function addConstraintsAndFunctions() {
       ) AS $$
       BEGIN
         RETURN QUERY
-        SELECT 
-          COUNT(uc.id)::BIGINT as total_channels,
-          COUNT(DISTINCT le.channel_id)::BIGINT as live_channels,
-          COUNT(n.id)::BIGINT as total_notifications,
-          COUNT(CASE WHEN n.read = false THEN 1 END)::BIGINT as unread_notifications
+        SELECT
+          COUNT(uc.id)::BIGINT AS total_channels,
+          COUNT(DISTINCT le.channel_id)::BIGINT AS live_channels,
+          COUNT(n.id)::BIGINT AS total_notifications,
+          COUNT(CASE WHEN n.read = false THEN 1 END)::BIGINT AS unread_notifications
         FROM user_channels uc
-        LEFT JOIN live_events le ON uc.channel_id = le.channel_id AND le.is_active = true
-        LEFT JOIN notifications n ON uc.user_id = n.user_id
+        LEFT JOIN live_events le
+          ON uc.channel_id = le.channel_id AND le.is_active = TRUE
+        LEFT JOIN notifications n
+          ON uc.user_id = n.user_id
         WHERE uc.user_id = user_id_param;
       END;
-      $$ language 'plpgsql';
+      $$ LANGUAGE plpgsql;
     `);
     console.log('✅ Created get_user_channel_stats function');
 
-    // Function to update last_checked_at for user channels
+    // 🔹 5. Update channel last_checked
     await client.query(`
-      CREATE OR REPLACE FUNCTION update_channel_last_checked(channel_id_param VARCHAR)
-      RETURNS void AS $$
+      CREATE OR REPLACE FUNCTION update_channel_last_checked()
+      RETURNS TRIGGER AS $$
       BEGIN
-        UPDATE user_channels 
-        SET last_checked_at = NOW() 
-        WHERE channel_id = channel_id_param;
+        NEW.last_checked = NOW();
+        RETURN NEW;
       END;
-      $$ language 'plpgsql';
+      $$ LANGUAGE plpgsql;
     `);
     console.log('✅ Created update_channel_last_checked function');
 
-    await client.query('COMMIT');
     console.log('🎉 Database constraints and functions added successfully!');
-    
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ Failed to add constraints and functions:', error);
-    throw error;
+    console.error('❌ Error adding constraints/functions:', error);
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-// Make it runnable directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  addConstraintsAndFunctions().catch(console.error);
-}
-
-export { addConstraintsAndFunctions };
+runConstraintsAndFunctions();

@@ -1,5 +1,5 @@
 import { App } from './App.js'
-import { ToastProvider } from './components/Toast.js'
+import { toast } from './components/Toast.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 
 class Main {
@@ -16,29 +16,29 @@ class Main {
     try {
       // Create the app structure
       this.root.innerHTML = `
-        <div id="error-boundary">
-          <div id="toast-provider">
-            <div id="app"></div>
-          </div>
-        </div>
+        <div id="app"></div>
+        <div id="toast-container"></div>
       `
 
-      const errorBoundaryEl = document.getElementById('error-boundary')
-      const toastProviderEl = document.getElementById('toast-provider')
       const appEl = document.getElementById('app')
+      const toastContainer = document.getElementById('toast-container')
 
-      if (!errorBoundaryEl || !toastProviderEl || !appEl) {
+      if (!appEl || !toastContainer) {
         throw new Error('Failed to create app structure')
       }
 
-      // Initialize components
+      // Initialize error boundary globally
       const errorBoundary = new ErrorBoundary()
-      const toastProvider = new ToastProvider()
-      const app = new App()
+      errorBoundary.mount(this.root)
 
-      errorBoundary.mount(errorBoundaryEl)
-      toastProvider.mount(toastProviderEl)
+      // Initialize toast system
+      toast.mount(toastContainer)
+
+      // Initialize main app
+      const app = new App()
       app.mount(appEl)
+      
+      console.log('[Main] Application initialized successfully')
       
     } catch (error) {
       console.error('Failed to initialize application:', error)
@@ -48,8 +48,9 @@ class Main {
           <div class="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
             <div class="text-center">
               <h1 class="text-2xl font-bold mb-4">Failed to Load</h1>
-              <p class="text-gray-400">The application failed to initialize. Please refresh the page.</p>
-              <button onclick="window.location.reload()" class="mt-4 px-4 py-2 bg-orange-500 rounded">
+              <p class="text-gray-400 mb-4">The application failed to initialize.</p>
+              <p class="text-sm text-red-400 mb-6">${error.message}</p>
+              <button onclick="window.location.reload()" class="px-4 py-2 bg-orange-500 rounded hover:bg-orange-600">
                 Refresh Page
               </button>
             </div>

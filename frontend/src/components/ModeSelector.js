@@ -10,16 +10,18 @@ export class ModeSelector {
 
   render() {
     this.container.innerHTML = `
-      <div class="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+      <div class="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
         <h1 class="text-4xl font-bold mb-8">Live Multi-Channel</h1>
         <p class="text-gray-400 mb-12 max-w-md text-center">
           Monitor YouTube live streams from your favorite channels
         </p>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl px-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
           <!-- Power User Mode -->
-          <div class="bg-gray-800 rounded-lg p-8 border-2 border-gray-700 hover:border-orange-500 transition cursor-pointer"
-               onclick="this.parentElement.parentElement.component.handleModeSelect('user-key')">
+          <div 
+            id="mode-user-key"
+            class="bg-gray-800 rounded-lg p-8 border-2 border-gray-700 hover:border-orange-500 transition cursor-pointer"
+          >
             <div class="text-2xl mb-4">🔑</div>
             <h2 class="text-xl font-bold mb-2">Use Your API Key</h2>
             <p class="text-gray-400 text-sm mb-4">
@@ -37,8 +39,10 @@ export class ModeSelector {
           </div>
           
           <!-- RSS Mode -->
-          <div class="bg-gray-800 rounded-lg p-8 border-2 border-gray-700 hover:border-orange-500 transition cursor-pointer"
-               onclick="this.parentElement.parentElement.component.handleModeSelect('rss')">
+          <div 
+            id="mode-rss"
+            class="bg-gray-800 rounded-lg p-8 border-2 border-gray-700 hover:border-orange-500 transition cursor-pointer"
+          >
             <div class="text-2xl mb-4">📡</div>
             <h2 class="text-xl font-bold mb-2">Use RSS Service</h2>
             <p class="text-gray-400 text-sm mb-4">
@@ -62,8 +66,27 @@ export class ModeSelector {
       </div>
     `
 
-    // Store component reference for event handlers
-    this.container.component = this
+    // Add proper event listeners
+    this.attachEventListeners()
+  }
+
+  attachEventListeners() {
+    const userKeyCard = document.getElementById('mode-user-key')
+    const rssCard = document.getElementById('mode-rss')
+
+    if (userKeyCard) {
+      userKeyCard.addEventListener('click', () => {
+        console.log('[ModeSelector] User-key mode selected')
+        this.handleModeSelect('user-key')
+      })
+    }
+
+    if (rssCard) {
+      rssCard.addEventListener('click', () => {
+        console.log('[ModeSelector] RSS mode selected')
+        this.handleModeSelect('rss')
+      })
+    }
   }
 
   handleModeSelect(mode) {

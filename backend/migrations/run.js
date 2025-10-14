@@ -1,3 +1,4 @@
+// backend/migrations/run.js
 import pg from 'pg';
 import dotenv from 'dotenv';
 
@@ -7,19 +8,17 @@ const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Add connection timeout and keep it open for multiple operations
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
 });
 
 async function runMigrations() {
   const client = await pool.connect();
-  
+
   try {
     console.log('🗄️  Running database migrations...');
-    
     await client.query('BEGIN');
-    
+
     // Users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -35,7 +34,7 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key) WHERE api_key IS NOT NULL;
     `);
     console.log('✅ Created users table');
-    
+
     // User channels table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_channels (
@@ -48,12 +47,12 @@ async function runMigrations() {
         last_checked_at TIMESTAMP,
         UNIQUE(user_id, channel_id)
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_user_channels_user_id ON user_channels(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_channels_channel_id ON user_channels(channel_id);
     `);
     console.log('✅ Created user_channels table');
-    
+
     // RSS subscriptions table
     await client.query(`
       CREATE TABLE IF NOT EXISTS rss_subscriptions (
@@ -64,11 +63,11 @@ async function runMigrations() {
         expires_at TIMESTAMP NOT NULL,
         last_notified_at TIMESTAMP
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_rss_subscriptions_expires_at ON rss_subscriptions(expires_at);
     `);
     console.log('✅ Created rss_subscriptions table');
-    
+
     // Live events table
     await client.query(`
       CREATE TABLE IF NOT EXISTS live_events (
@@ -82,17 +81,22 @@ async function runMigrations() {
         ended_at TIMESTAMP,
         peak_viewers INTEGER,
         average_viewers INTEGER,
-        checked_at TIMESTAMP DEFAULT NOW(),
-        is_active BOOLEAN DEFAULT TRUE
+        checked_at TIMESTAMP DEFAULT NOW()
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_live_events_channel_id ON live_events(channel_id);
       CREATE INDEX IF NOT EXISTS idx_live_events_video_id ON live_events(video_id);
       CREATE INDEX IF NOT EXISTS idx_live_events_started_at ON live_events(started_at);
+    `);
+
+    // ✅ Ensure the column exists even if the table was created earlier
+    await client.query(`
+      ALTER TABLE live_events
+      ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
       CREATE INDEX IF NOT EXISTS idx_live_events_is_active ON live_events(is_active);
     `);
-    console.log('✅ Created live_events table');
-    
+    console.log('✅ Created/ensured live_events table and columns');
+
     // Notifications table
     await client.query(`
       CREATE TABLE IF NOT EXISTS notifications (
@@ -101,11 +105,11 @@ async function runMigrations() {
         channel_id VARCHAR(255) NOT NULL,
         video_id VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
-        notification_type VARCHAR(50) DEFAULT 'live_start', -- live_start, live_end, highlight, etc.
+        notification_type VARCHAR(50) DEFAULT 'live_start',
         read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
       CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
@@ -123,15 +127,15 @@ async function runMigrations() {
         timestamp TIMESTAMP DEFAULT NOW(),
         date DATE NOT NULL
       );
-      
+
       CREATE INDEX IF NOT EXISTS idx_quota_usage_date ON quota_usage(date);
       CREATE INDEX IF NOT EXISTS idx_quota_usage_user_id ON quota_usage(user_id);
       CREATE INDEX IF NOT EXISTS idx_quota_usage_endpoint ON quota_usage(endpoint);
       CREATE INDEX IF NOT EXISTS idx_quota_usage_timestamp ON quota_usage(timestamp);
     `);
     console.log('✅ Created quota_usage table');
-    
-    // User settings table (optional but useful)
+
+    // User settings table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_settings (
         id SERIAL PRIMARY KEY,
@@ -146,26 +150,24 @@ async function runMigrations() {
     `);
     console.log('✅ Created user_settings table');
 
-    // Add role column to users table for admin functionality
+    // Add role column to users
     await client.query(`
-      ALTER TABLE users 
-      ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user'
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user';
     `);
     console.log('✅ Added role column to users table');
 
-    // Add default admin user if specified in env (optional)
+    // Optional: default admin
     if (process.env.DEFAULT_ADMIN_EMAIL) {
       await client.query(`
-        INSERT INTO users (google_id, email, name, role) 
+        INSERT INTO users (google_id, email, name, role)
         VALUES ('admin_default', $1, 'System Admin', 'admin')
-        ON CONFLICT (google_id) DO UPDATE SET role = 'admin'
+        ON CONFLICT (google_id) DO UPDATE SET role = 'admin';
       `, [process.env.DEFAULT_ADMIN_EMAIL]);
       console.log('✅ Created default admin user');
     }
 
     await client.query('COMMIT');
     console.log('🎉 All migrations completed successfully!');
-    
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error);
@@ -176,31 +178,8 @@ async function runMigrations() {
   }
 }
 
-// Add function to check if migrations are needed
-async function checkMigrations() {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'users'
-      );
-    `);
-    return result.rows[0].exists;
-  } catch (error) {
-    console.error('Error checking migrations:', error);
-    return false;
-  } finally {
-    client.release();
-  }
-}
-
-
-
-// Make it runnable directly or importable
 if (import.meta.url === `file://${process.argv[1]}`) {
   runMigrations().catch(console.error);
 }
 
-export { runMigrations, checkMigrations };
+export { runMigrations };

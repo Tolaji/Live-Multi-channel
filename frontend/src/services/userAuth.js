@@ -1,9 +1,10 @@
-class UserAuth {
+// userAuth.js
+export class UserAuth {
   async getStoredAPIKey() {
     try {
       return localStorage.getItem('youtube-api-key')
     } catch (error) {
-      console.error('Failed to get stored API key:', error)
+      console.error('[UserAuth] getStoredAPIKey error:', error)
       return null
     }
   }
@@ -13,7 +14,7 @@ class UserAuth {
       localStorage.setItem('youtube-api-key', apiKey)
       return true
     } catch (error) {
-      console.error('Failed to store API key:', error)
+      console.error('[UserAuth] storeAPIKey error:', error)
       return false
     }
   }
@@ -23,7 +24,7 @@ class UserAuth {
       localStorage.removeItem('youtube-api-key')
       return true
     } catch (error) {
-      console.error('Failed to clear API key:', error)
+      console.error('[UserAuth] clearAPIKey error:', error)
       return false
     }
   }
@@ -33,24 +34,23 @@ class UserAuth {
       return false
     }
 
-    // Basic format validation first
-    if (!/^[A-Za-z0-9_-]{39}$/.test(apiKey)) {
+    // A simple regex check (YouTube keys tend to be long alphanumeric + underscores/dashes)
+    if (!/^[A-Za-z0-9_-]{30,}$/.test(apiKey)) {
       return false
     }
 
     try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=dQw4w9WgXcQ&key=${apiKey}`
+      // Try a harmless query to validate key
+      const testVid = 'dQw4w9WgXcQ'
+      const resp = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${testVid}&key=${apiKey}`
       )
-      
-      if (response.status === 403) {
-        console.warn('API key exists but lacks permissions')
+      if (resp.status === 403 || resp.status === 400) {
         return false
       }
-      
-      return response.ok
-    } catch (error) {
-      console.warn('API key validation request failed:', error)
+      return resp.ok
+    } catch (err) {
+      console.warn('[UserAuth] validateAPIKey fetch error:', err)
       return false
     }
   }

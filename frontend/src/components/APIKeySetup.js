@@ -10,11 +10,20 @@ export class APIKeySetup {
   }
 
   mount(container) {
+    if (!container) {
+      console.error('[APIKeySetup] mount: container is null')
+      return
+    }
     this.container = container
     this.render()
   }
 
   render() {
+    if (!this.container) {
+      console.error('[APIKeySetup] render: container is null')
+      return
+    }
+
     if (this.step === 'instructions') {
       this.renderInstructions()
     } else {
@@ -75,7 +84,6 @@ export class APIKeySetup {
         </div>
       </div>
     `
-
     this.container.component = this
   }
 
@@ -130,31 +138,33 @@ export class APIKeySetup {
         </div>
       </div>
     `
-
     this.container.component = this
   }
 
   async handleSubmit(event) {
     event.preventDefault()
-    if (!this.apiKey.trim()) return
+    if (!this.apiKey.trim()) {
+      toast.show('Please enter an API key', 'warning')
+      return
+    }
 
     this.loading = true
     this.render()
 
     try {
       const isValid = await userAuth.validateAPIKey(this.apiKey)
-      
       if (isValid) {
         await userAuth.storeAPIKey(this.apiKey)
         toast.show('API key validated and stored securely!', 'success')
-        
         if (this.onComplete) {
-          setTimeout(() => this.onComplete(), 1500)
+          // Delay a little for UX
+          setTimeout(() => this.onComplete(), 500)
         }
       } else {
         toast.show('Invalid API key. Please check and try again.', 'error')
       }
-    } catch {
+    } catch (err) {
+      console.error('[APIKeySetup] handleSubmit error:', err)
       toast.show('Failed to validate API key', 'error')
     } finally {
       this.loading = false

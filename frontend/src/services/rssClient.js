@@ -4,110 +4,146 @@ class RSSClient {
     this.isAuthenticated = false
   }
 
-  async initialize() {
+  // rssClient.js - Add authentication check method
+  async checkAuthentication() {
     try {
-      const response = await fetch(`${this.backendUrl}/api/auth/session`, {
+      const response = await fetch(`${this.backendUrl}/auth/session`, {
         credentials: 'include'
       })
-      
+
       if (response.ok) {
         const sessionData = await response.json()
         this.isAuthenticated = sessionData.authenticated === true
         return this.isAuthenticated
       }
       
-      // 401 is expected for unauthenticated users
+      this.isAuthenticated = false
+      return false
+    } catch (error) {
+      console.warn('[RSSClient] Authentication check failed:', error)
+      this.isAuthenticated = false
+      return false
+    }
+  }
+
+  async initialize() {
+    try {
+      const response = await fetch(`${this.backendUrl}/auth/session`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const sessionData = await response.json()
+        this.isAuthenticated = sessionData.authenticated === true
+        return this.isAuthenticated
+      }
+
+      // 401 means not authenticated
       if (response.status === 401) {
         this.isAuthenticated = false
         return false
       }
-      
-      // For other errors, assume not authenticated
+
+      // Other error statuses => treat as unauthenticated
       this.isAuthenticated = false
       return false
-      
     } catch (error) {
-      console.warn('[RSSClient] Session check failed, assuming not authenticated')
+      console.warn('[RSSClient] initialize: session check failed, assuming not authenticated', error)
       this.isAuthenticated = false
       return false
     }
   }
 
-  async checkChannelLiveStatus(channelId) {
-    if (!this.isAuthenticated) {
-      throw new Error('Not authenticated in RSS mode')
-    }
-    
-    const response = await fetch(
-      `${this.backendUrl}/api/channels/${channelId}/live-status`,
-      { credentials: 'include' }
-    )
-    
-    if (!response.ok) {
-      throw new Error('Failed to check live status')
-    }
-    
-    return await response.json()
-  }
-
+  // rssClient.js - Enhanced error handling
   async fetchTrackedChannels() {
     if (!this.isAuthenticated) {
-      throw new Error('Not authenticated in RSS mode')
+      throw new Error('Not authenticated in RSS mode');
     }
     
-    const response = await fetch(
-      `${this.backendUrl}/api/channels/tracked`,
-      { credentials: 'include' }
-    )
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch tracked channels')
+    try {
+      console.log('[RSSClient] Fetching tracked channels from:', `${this.backendUrl}/api/channels/tracked`);
+      
+      const resp = await fetch(`${this.backendUrl}/api/channels/tracked`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      console.log('[RSSClient] Response status:', resp.status);
+      
+      if (!resp.ok) {
+        let errorData;
+        try {
+          errorData = await resp.json();
+        } catch (parseError) {
+          errorData = { error: `HTTP ${resp.status}: ${resp.statusText}` };
+        }
+        
+        console.error('[RSSClient] API error:', errorData);
+        throw new Error(errorData.error || errorData.message || `HTTP ${resp.status}`);
+      }
+      
+      const data = await resp.json();
+      console.log('[RSSClient] Successfully fetched channels:', data.length || 0);
+      return data;
+      
+    } catch (error) {
+      console.error('[RSSClient] Network error:', error);
+      throw new Error(`Failed to fetch tracked channels: ${error.message}`);
     }
-    
-    return await response.json()
   }
 
   async addChannel(channelId, channelTitle, thumbnailUrl) {
     if (!this.isAuthenticated) {
       throw new Error('Not authenticated in RSS mode')
     }
-    
-    const response = await fetch(
-      `${this.backendUrl}/api/channels/track`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ channelId, channelTitle, thumbnailUrl })
+    const resp = await fetch(`${this.backendUrl}/api/channels/track`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId, channelTitle, thumbnailUrl })
+    })
+    if (!resp.ok) {
+      let errMsg = 'Failed to add channel'
+      try {
+        const errJson = await resp.json()
+        if (errJson.error) errMsg = errJson.error
+      } catch {
+        // Ignore JSON parse errors, fallback to default error message
       }
-    )
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to add channel')
+      throw new Error(errMsg)
     }
-    
-    return await response.json()
+    return await resp.json()
   }
 
   async removeChannel(channelId) {
     if (!this.isAuthenticated) {
       throw new Error('Not authenticated in RSS mode')
     }
-    
-    const response = await fetch(
-      `${this.backendUrl}/api/channels/${channelId}/untrack`,
-      {
-        method: 'DELETE',
-        credentials: 'include'
-      }
-    )
-    
-    if (!response.ok) {
-      throw new Error('Failed to remove channel')
+    const resp = await fetch(`${this.backendUrl}/api/channels/${channelId}/untrack`, {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => resp.statusText)
+      throw new Error(`Failed to remove channel: ${text}`)
     }
-    
-    return await response.json()
+    return await resp.json()
+  }
+
+  async checkChannelLiveStatus(channelId) {
+    if (!this.isAuthenticated) {
+      throw new Error('Not authenticated in RSS mode')
+    }
+    const resp = await fetch(`${this.backendUrl}/api/channels/${channelId}/live-status`, {
+      credentials: 'include'
+    })
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => resp.statusText)
+      throw new Error(`Failed to get live status: ${txt}`)
+    }
+    return await resp.json()
   }
 }
 

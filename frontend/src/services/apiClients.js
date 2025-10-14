@@ -1,3 +1,4 @@
+// apiClients.js
 import { rssClient } from './rssClient.js'
 import { userKeyService } from './userKeyService.js'
 
@@ -8,68 +9,66 @@ class APIClient {
     this.isInitialized = false
   }
 
+  // apiClients.js - Enhanced initialization
   async initialize() {
     if (this.isInitialized) return this.mode
-
+    
     console.log('[APIClient] Starting initialization...')
-
+    
     try {
-      // Try user key first (local storage)
+      // 1. Try user-key mode first
       const userKeyMode = await userKeyService.initialize()
       if (userKeyMode) {
         this.mode = 'user-key'
-        console.log('[APIClient] Mode: User-owned API key')
         this.isInitialized = true
+        console.log('[APIClient] Mode: user-key')
         return this.mode
       }
 
-      console.log('[APIClient] User key not available, trying RSS mode...')
-
-      // Try RSS mode (backend session)
-      const rssMode = await rssClient.initialize()
-      if (rssMode) {
+      // 2. Check RSS mode authentication
+      console.log('[APIClient] User key not available, checking RSS mode...')
+      const rssAuthenticated = await rssClient.checkAuthentication()
+      
+      if (rssAuthenticated) {
         this.mode = 'rss'
-        console.log('[APIClient] Mode: RSS service')
-        this.isInitialized = true
-        return this.mode
+        console.log('[APIClient] Mode: RSS (authenticated)')
+      } else {
+        this.mode = 'login'
+        console.log('[APIClient] Mode: login required')
       }
-
-      console.log('[APIClient] No authentication mode available')
+      
       this.isInitialized = true
-      return null
+      return this.mode
       
     } catch (error) {
       console.error('[APIClient] Initialization failed:', error)
-      this.isInitialized = false
-      return null
+      this.mode = 'login' // Fallback to login on error
+      this.isInitialized = true
+      return this.mode
     }
   }
 
-  async checkChannelLiveStatus(channelId) {
-    await this.ensureInitialized()
-    
-    if (this.mode === 'user-key') {
-      return await userKeyService.checkChannelLiveStatus(channelId)
-    } else if (this.mode === 'rss') {
-      return await rssClient.checkChannelLiveStatus(channelId)
+  async ensureInitialized() {
+    if (!this.isInitialized) {
+      await this.initialize()
     }
-    
-    throw new Error('No authentication mode available')
+    if (!this.mode) {
+      throw new Error('Application not properly initialized')
+    }
   }
 
   async fetchSubscriptions() {
     await this.ensureInitialized()
-    
     if (this.mode === 'user-key') {
       return await userKeyService.fetchSubscriptions()
     } else if (this.mode === 'rss') {
       return await rssClient.fetchTrackedChannels()
     }
-    
     throw new Error('No authentication mode available')
   }
 
   async addChannel(channelId, channelTitle, thumbnailUrl) {
+    await this.ensureInitialized()
     if (this.mode !== 'rss') {
       throw new Error('Channel tracking only available in RSS mode')
     }
@@ -77,20 +76,21 @@ class APIClient {
   }
 
   async removeChannel(channelId) {
+    await this.ensureInitialized()
     if (this.mode !== 'rss') {
       throw new Error('Channel tracking only available in RSS mode')
     }
     return await rssClient.removeChannel(channelId)
   }
 
-  async ensureInitialized() {
-    if (!this.isInitialized) {
-      await this.initialize()
+  async checkChannelLiveStatus(channelId) {
+    await this.ensureInitialized()
+    if (this.mode === 'user-key') {
+      return await userKeyService.checkChannelLiveStatus(channelId)
+    } else if (this.mode === 'rss') {
+      return await rssClient.checkChannelLiveStatus(channelId)
     }
-    
-    if (!this.mode) {
-      throw new Error('Application not properly initialized')
-    }
+    throw new Error('No authentication mode available')
   }
 
   isUserKeyMode() {

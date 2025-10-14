@@ -12,9 +12,20 @@ const router = express.Router();
 
 // Middleware: Check authentication
 function requireAuth(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.session.userId || !req.session.userDbId) {
+    console.log('[Auth] No valid session found:', {
+      userId: req.session.userId,
+      userDbId: req.session.userDbId
+    });
+    return res.status(401).json({ error: 'Unauthorized - please log in again' });
   }
+  
+  // Set req.user for compatibility with user.js routes
+  req.user = {
+    id: req.session.userDbId, // Use the database ID
+    google_id: req.session.userId
+  };
+  
   next();
 }
 
@@ -32,6 +43,11 @@ router.post('/channels/track', requireAuth, async (req, res) => {
   try {
     const { channelId, channelTitle, thumbnailUrl } = req.body;
     const userId = req.session.userId;
+
+    // Ensure user is authenticated
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     
     // Check channel limit (5 for free tier)
     const countResult = await db.query(
@@ -99,15 +115,25 @@ router.delete('/channels/:channelId/untrack', requireAuth, async (req, res) => {
 // GET /api/channels/tracked - Get user's tracked channels
 router.get('/channels/tracked', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    // Use the database user ID, not the Google ID from session
+    const userDbId = req.session.userDbId;
+    
+    if (!userDbId) {
+      console.error('[API] No userDbId in session');
+      return res.status(401).json({ error: 'User not properly authenticated' });
+    }
+    
+    console.log(`[API] Fetching tracked channels for database user ID: ${userDbId}`);
     
     const result = await db.query(
       `SELECT channel_id, channel_title, thumbnail_url, added_at
        FROM user_channels
        WHERE user_id = $1
        ORDER BY added_at DESC`,
-      [userId]
+      [userDbId]  // Use the database user ID, not Google ID
     );
+    
+    console.log(`[API] Found ${result.rows.length} channels for user ${userDbId}`);
     
     const channels = result.rows.map(row => ({
       channelId: row.channel_id,
@@ -119,7 +145,11 @@ router.get('/channels/tracked', requireAuth, async (req, res) => {
     
   } catch (error) {
     console.error('Error fetching tracked channels:', error);
-    res.status(500).json({ error: 'Failed to fetch channels' });
+    res.status(500).json({ 
+      error: 'Failed to fetch channels',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -248,6 +278,18 @@ router.post('/notifications/mark-read', requireAuth, async (req, res) => {
   }
 });
 
+// Simple logout endpoint that doesn't depend on user.js
+router.post('/auth/simple-logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).json({ error: 'Failed to logout' });
+    }
+    
+    res.clearCookie('connect.sid');
+    res.json({ success: true, message: 'Logged out successfully' });
+  });
+});
 
 const redisClient = createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
@@ -277,6 +319,55 @@ router.get('/test/db', async (req, res) => {
     res.json({ success: true, dbTime: result.rows[0].now });
   } catch (error) {
     res.status(500).json({ error: 'Database test failed' });
+  }
+});
+
+router.get('/test/db-connection', async (req, res) => {
+  try {
+    const result = await db.query('SELECT NOW() as current_time, version() as version')
+    res.json({ 
+      success: true, 
+      dbTime: result.rows[0].current_time,
+      version: result.rows[0].version
+    })
+  } catch (error) {
+    console.error('Database connection test failed:', error)
+    res.status(500).json({ 
+      error: 'Database connection failed',
+      details: error.message 
+    })
+  }
+})
+
+// Add to api.js for debugging
+router.get('/debug/session', (req, res) => {
+  res.json({
+    session: req.session,
+    headers: req.headers,
+    authenticated: !!req.session.userId
+  });
+});
+
+router.get('/debug/users', async (req, res) => {
+  try {
+    const result = await db.query('SELECT id, google_id, email FROM users LIMIT 10');
+    res.json({ users: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/debug/user-channels', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT uc.*, u.email 
+      FROM user_channels uc 
+      LEFT JOIN users u ON uc.user_id = u.id 
+      LIMIT 10
+    `);
+    res.json({ userChannels: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

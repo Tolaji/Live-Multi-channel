@@ -9,8 +9,8 @@
     "db:migrate": "node migrations/run.js",
     "db:constraints": "node migrations/constraintsAndFunctions.js",
     "db:setup": "npm run db:migrate && npm run db:constraints",
-    "db:reset": "node migrations/reset.js",
-    "db:seed": "node migrations/seed.js"
+    "db:fixChannelIds": "node migrations/fixChannelIds.js",
+    "db:verifyMigration": "node migrations/verifyMigration.js"
   },
   "keywords": [],
   "author": "",

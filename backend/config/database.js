@@ -18,7 +18,8 @@ const pool = new Pool({
   // Connection pool settings
   max: 20, // Maximum number of clients in pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return error after 2 seconds if connection fails
+  connectionTimeoutMillis: 10000, // Return error after 2 seconds if connection fails
+  maxUses: 7500 // Recycle clients after 7500 queries
 });
 
 // Test connection on startup
