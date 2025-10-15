@@ -17,6 +17,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@upstash/redis": "^1.35.6",
     "axios": "^1.12.2",
     "connect-redis": "^9.0.0",
     "cookie-parser": "^1.4.7",
