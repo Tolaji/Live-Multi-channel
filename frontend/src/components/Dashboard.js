@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar.js'
 import { LivePlayer } from './LivePlayer.js'
 import { NotificationBell } from './NotificationBell.js'
 import { toast } from './Toast.js'
+import { rssClient } from '../services/rssClient.js';
 
 export class Dashboard {
   constructor() {
@@ -14,46 +15,76 @@ export class Dashboard {
     this.showChat = false
     this.liveStatus = {}
     this.statusLoading = false
+    this.sidebar = null;
   }
+
+  // async mount(container) {
+  //   if (!container) {
+  //     console.error('[Dashboard] mount failed: container is null or undefined')
+  //     return
+  //   }
+  //   this.container = container
+
+  //   await this.loadChannels()
+  //   this.setupKeyboardShortcuts()
+  //   this.render()
+  // }
 
   async mount(container) {
-    if (!container) {
-      console.error('[Dashboard] mount failed: container is null or undefined')
-      return
-    }
-    this.container = container
-
-    await this.loadChannels()
-    this.setupKeyboardShortcuts()
-    this.render()
+    this.container = container;
+    await this.loadChannels();
+    this.render();
   }
 
-  async loadChannels() {
-    this.loading = true;
-    this.render(); // Show loading state immediately
+  // async loadChannels() {
+  //   this.loading = true;
+  //   this.render(); // Show loading state immediately
     
+  //   try {
+  //     this.channels = await apiClient.fetchSubscriptions();
+      
+  //     if (!Array.isArray(this.channels)) {
+  //       console.error('[Dashboard] fetchSubscriptions returned invalid data:', this.channels);
+  //       this.channels = [];
+  //     }
+      
+  //     console.log(`[Dashboard] Loaded ${this.channels.length} channels`);
+      
+  //     if (this.channels.length === 0) {
+  //       // This is normal for new users - show helpful message
+  //       console.log('[Dashboard] No channels found - new user or no subscriptions');
+  //     }
+      
+  //   } catch (error) {
+  //     console.error('[Dashboard] loadChannels error:', error);
+  //     toast.show(`Failed to load channels: ${error.message}`, 'error');
+  //     this.channels = [];
+  //   } finally {
+  //     this.loading = false;
+  //     this.render();
+  //   }
+  // }
+
+  async loadChannels() {
+    // Fetch tracked channels from backend
     try {
-      this.channels = await apiClient.fetchSubscriptions();
-      
-      if (!Array.isArray(this.channels)) {
-        console.error('[Dashboard] fetchSubscriptions returned invalid data:', this.channels);
-        this.channels = [];
-      }
-      
-      console.log(`[Dashboard] Loaded ${this.channels.length} channels`);
-      
-      if (this.channels.length === 0) {
-        // This is normal for new users - show helpful message
-        console.log('[Dashboard] No channels found - new user or no subscriptions');
-      }
-      
+      const channels = await rssClient.fetchTrackedChannels();
+      this.channels = channels;
+
+      // Fetch live status for each channel
+      this.liveStatus = {};
+      await Promise.all(channels.map(async (channel) => {
+        try {
+          const status = await rssClient.checkChannelLiveStatus(channel.channelId);
+          this.liveStatus[channel.channelId] = status;
+        } catch {
+          this.liveStatus[channel.channelId] = { isLive: false };
+        }
+      }));
     } catch (error) {
-      console.error('[Dashboard] loadChannels error:', error);
-      toast.show(`Failed to load channels: ${error.message}`, 'error');
+      console.error('[Dashboard] Failed to load channels:', error);
       this.channels = [];
-    } finally {
-      this.loading = false;
-      this.render();
+      this.liveStatus = {};
     }
   }
 
@@ -184,8 +215,23 @@ export class Dashboard {
   }
 
   // Main render method
-  // Dashboard.js - Complete fix for DOM timing
   render() {
+    // Mount sidebar
+    const sidebarContainer = document.getElementById('sidebar-container');
+    if (!sidebarContainer) return;
+
+    if (!this.sidebar) {
+      this.sidebar = new Sidebar();
+      this.sidebar.onChannelSelect = this.handleChannelSelect.bind(this);
+      this.sidebar.onAddChannel = this.handleAddChannel.bind(this);
+      this.sidebar.onRemoveChannel = this.handleRemoveChannel.bind(this);
+    }
+
+    this.sidebar.channels = this.channels;
+    this.sidebar.liveStatus = this.liveStatus;
+    this.sidebar.activeChannel = this.activeChannel;
+    this.sidebar.mount(sidebarContainer);
+
     if (!this.container) {
       console.error('[Dashboard] render called but this.container is null');
       return;
@@ -379,6 +425,31 @@ export class Dashboard {
         </div>
       </div>
     `
+  }
+
+  async handleAddChannel(channelData) {
+    try {
+      await rssClient.addChannel(channelData.channelId, channelData.channelTitle, channelData.thumbnailUrl);
+      await this.loadChannels();
+      this.render();
+    } catch (error) {
+      alert('Failed to add channel');
+    }
+  }
+
+  async handleRemoveChannel(channelId) {
+    try {
+      await rssClient.removeChannel(channelId);
+      await this.loadChannels();
+      this.render();
+    } catch (error) {
+      alert('Failed to remove channel');
+    }
+  }
+
+  handleChannelSelect(channel) {
+    this.activeChannel = channel;
+    this.render();
   }
   
 }

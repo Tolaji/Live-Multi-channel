@@ -198,6 +198,7 @@ export class Sidebar {
     this.onAddChannel = null;
     this.onRemoveChannel = null;
     this.searchQuery = '';
+    this.renderTimeout = null;
   }
 
   mount(container) {
@@ -261,7 +262,6 @@ export class Sidebar {
             </button>
           ` : ''}
           
-          
           <div class="text-xs text-gray-400 text-center">
             ${this.channels.length} channel${this.channels.length !== 1 ? 's' : ''} tracked
           </div>
@@ -269,7 +269,6 @@ export class Sidebar {
       </div>
     `;
 
-    
     // Add event listeners
     this.mountEventListeners();
     
@@ -277,7 +276,6 @@ export class Sidebar {
     setTimeout(() => {
       this.mountChannelLists();
     }, 10);
-    
   }
 
   renderChannelSection(title, channels, color, isLive) {
@@ -297,13 +295,43 @@ export class Sidebar {
   }
 
   mountEventListeners() {
-    // Search input
-    const searchInput = document.getElementById('sidebar-search-input');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        this.searchQuery = e.target.value;
+  const searchInput = document.getElementById('sidebar-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const prevValue = this.searchQuery;
+      const prevCursor = e.target.selectionStart;
+      this.searchQuery = e.target.value;
+
+      // Debounce the render to avoid losing cursor focus
+      if (this.renderTimeout) clearTimeout(this.renderTimeout);
+      this.renderTimeout = setTimeout(() => {
         this.render();
-      });
+
+        // Restore focus and cursor position after re-render
+        setTimeout(() => {
+          const newSearchInput = document.getElementById('sidebar-search-input');
+          if (newSearchInput) {
+            newSearchInput.focus();
+            // Calculate new cursor position based on input changes
+            const diff = newSearchInput.value.length - prevValue.length;
+            let newCursor = prevCursor + diff;
+            if (newCursor < 0) newCursor = 0;
+            if (newCursor > newSearchInput.value.length) newCursor = newSearchInput.value.length;
+            newSearchInput.setSelectionRange(newCursor, newCursor);
+          }
+        }, 0);
+      }, 300);
+    });
+  
+
+      // Also handle key events to track cursor position
+      // searchInput.addEventListener('keyup', (e) => {
+      //   cursorPosition = e.target.selectionStart;
+      // });
+
+      // searchInput.addEventListener('click', (e) => {
+      //   cursorPosition = e.target.selectionStart;
+      // });
     }
 
     // Add channel button
