@@ -1,229 +1,40 @@
-// // Sidebar.js
-// import { ChannelList } from './ChannelList.js'
-// import { AddChannelModal } from './AddChannelModal.js';
-
-// export class Sidebar {
-//   constructor() {
-//     this.channels = []
-//     this.liveStatus = {}
-//     this.activeChannel = null
-//     this.onChannelSelect = null
-//     this.onAddChannel = null
-//     this.onRemoveChannel = null
-//     this.searchQuery = ''
-//     this.showAddModal = false
-//   }
-
-//   mount(container) {
-//     if (!container) {
-//       console.error('[Sidebar] mount failed: container is null or undefined')
-//       return
-//     }
-//     this.container = container
-//     this.render()
-//   }
-
-//   render() {
-//     if (!this.container) {
-//       console.error('[Sidebar] render called but this.container is null')
-//       return
-//     }
-
-//     const filteredChannels = this.channels.filter(channel =>
-//       channel.channelTitle.toLowerCase().includes(this.searchQuery.toLowerCase())
-//     )
-
-//     const liveChannels = filteredChannels.filter(channel =>
-//       this.liveStatus[channel.channelId]?.isLive
-//     )
-
-//     const offlineChannels = filteredChannels.filter(channel =>
-//       !this.liveStatus[channel.channelId]?.isLive
-//     )
-
-//     this.container.innerHTML = `
-//       <aside class="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
-//         <!-- Search -->
-//         <div class="p-4 border-b border-gray-700">
-//           <input
-//             type="text"
-//             placeholder="Search channels..."
-//             value="${this.searchQuery}"
-//             oninput="this.parentElement.parentElement.component.searchQuery = this.value; this.parentElement.parentElement.component.render()"
-//             class="w-full px-3 py-2 bg-gray-700 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-//           />
-//         </div>
-        
-//         <!-- Channel list -->
-//         <div class="flex-1 overflow-y-auto">
-//           ${this.renderChannelSection('LIVE NOW', liveChannels, 'orange-500', true)}
-//           ${this.renderChannelSection('OFFLINE', offlineChannels, 'gray-400', false)}
-          
-//           ${filteredChannels.length === 0 ? `
-//             <div class="p-4 text-center text-gray-400">
-//               ${this.searchQuery ? 'No channels match your search' : 'No channels yet'}
-//             </div>
-//           ` : ''}
-//         </div>
-        
-//         <!-- Footer -->
-//         <div class="p-4 border-t border-gray-700">
-//           ${this.onAddChannel ? `
-//             <button
-//               onclick="this.parentElement.parentElement.component.showAddModal = true; this.parentElement.parentElement.component.render()"
-//               class="w-full px-4 py-2 bg-orange-500 rounded hover:bg-orange-600 font-semibold mb-2"
-//             >
-//               + Add Channel
-//             </button>
-//           ` : ''}
-          
-//           <div class="text-xs text-gray-400 text-center">
-//             ${this.channels.length} channel${this.channels.length !== 1 ? 's' : ''} tracked
-//           </div>
-//         </div>
-//       </aside>
-
-//       // ${this.showAddModal ? this.renderAddModal() : ''}
-//       ${this.showAddModal ? `
-//       <div id="add-channel-modal-container"></div>
-//     ` : ''}
-//     `;
-    
-//     this.container.component = this
-
-//     if (this.showAddModal) {
-//       this.mountAddChannelModal();
-//     }
-
-//     this.mountChannelLists()
-//   }
-
-//   mountAddChannelModal() {
-//     const modalContainer = document.getElementById('add-channel-modal-container');
-//     if (!modalContainer) return;
-
-//     const modal = new AddChannelModal();
-//     modal.mount(modalContainer);
-//     modal.onAddChannel = async (channelData) => {
-//       if (this.onAddChannel) {
-//         await this.onAddChannel(channelData);
-//         this.showAddModal = false;
-//         this.render();
-//       }
-//     };
-//     modal.onClose = () => {
-//       this.showAddModal = false;
-//       this.render();
-//     };
-//   }
-
-//   renderChannelSection(title, channels, color, isLive) {
-//     if (channels.length === 0) return ''
-//     // Create safe ID
-//     const id = `channel-list-${title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]/g, '')}`
-//     return `
-//       <div class="p-4">
-//         <h3 class="text-sm font-semibold text-${color} mb-2 flex items-center">
-//           ${isLive ? '<span class="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse"></span>' : ''}
-//           ${title} (${channels.length})
-//         </h3>
-//         <div id="${id}"></div>
-//       </div>
-//     `
-//   }
-
-//   mountChannelLists() {
-//     const liveId = 'channel-list-live-now'
-//     const offlineId = 'channel-list-offline'
-
-//     const liveContainer = document.getElementById(liveId)
-//     if (liveContainer) {
-//       const liveChannels = this.channels.filter(ch => this.liveStatus[ch.channelId]?.isLive)
-//       const channelList = new ChannelList()
-//       channelList.mount(liveContainer)
-//       channelList.channels = liveChannels
-//       channelList.liveStatus = this.liveStatus
-//       channelList.activeChannel = this.activeChannel
-//       channelList.onChannelSelect = this.onChannelSelect
-//       channelList.onRemoveChannel = this.onRemoveChannel
-//     }
-
-//     const offlineContainer = document.getElementById(offlineId)
-//     if (offlineContainer) {
-//       const offlineChannels = this.channels.filter(ch => !this.liveStatus[ch.channelId]?.isLive)
-//       const channelList = new ChannelList()
-//       channelList.mount(offlineContainer)
-//       channelList.channels = offlineChannels
-//       channelList.liveStatus = this.liveStatus
-//       channelList.activeChannel = this.activeChannel
-//       channelList.onChannelSelect = this.onChannelSelect
-//       channelList.onRemoveChannel = this.onRemoveChannel
-//     }
-//   }
-
-//   renderAddModal() {
-//     return `
-//       <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-//         <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-//           <h2 class="text-xl font-bold mb-4">Add Channel</h2>
-//           <div id="add-channel-modal-content"></div>
-//         </div>
-//       </div>
-//     `
-//   }
-
-//   addTestChannel() {
-//     const testChannel = {
-//       channelId: 'UC_x5XG1OV2P6uZZ5FSM9Ttw', // Google Developers channel
-//       channelTitle: 'Google Developers',
-//       thumbnailUrl: 'https://yt3.googleusercontent.com/ytc/APkrFKZ2M8gM_7T5WkPbqF_NYNC2KVBQ2sdGIp2ag0S7=s176-c-k-c0x00ffffff-no-rj'
-//     };
-
-//     if (this.onAddChannel) {
-//       this.onAddChannel(testChannel);
-//     }
-//   }
-// }
-
-// Sidebar.js - Simplified and fixed version
-// Sidebar.js - Complete fix for channel rendering
-import { ChannelList } from './ChannelList.js';
+// Sidebar.js - Simplified and bulletproof
+import { ChannelList } from './ChannelList.js'
 
 export class Sidebar {
   constructor() {
-    this.channels = [];
-    this.liveStatus = {};
-    this.activeChannel = null;
-    this.onChannelSelect = null;
-    this.onAddChannel = null;
-    this.onRemoveChannel = null;
-    this.searchQuery = '';
-    this.renderTimeout = null;
+    this.channels = []
+    this.liveStatus = {}
+    this.activeChannel = null
+    this.onChannelSelect = null
+    this.onAddChannel = null
+    this.onRemoveChannel = null
+    this.searchQuery = ''
   }
 
   mount(container) {
     if (!container) {
-      console.error('[Sidebar] mount failed: container is null');
-      return;
+      console.error('[Sidebar] mount failed: container is null')
+      return
     }
-    this.container = container;
-    this.render();
+    this.container = container
+    this.render()
   }
 
   render() {
-    console.log('[Sidebar] Rendering with', this.channels.length, 'channels');
+    console.log('[Sidebar] Rendering with', this.channels.length, 'channels')
     
     const filteredChannels = this.channels.filter(channel =>
       channel.channelTitle.toLowerCase().includes(this.searchQuery.toLowerCase())
-    );
+    )
 
     const liveChannels = filteredChannels.filter(channel =>
       this.liveStatus[channel.channelId]?.isLive
-    );
+    )
 
     const offlineChannels = filteredChannels.filter(channel =>
       !this.liveStatus[channel.channelId]?.isLive
-    );
+    )
 
     this.container.innerHTML = `
       <div class="h-full flex flex-col bg-gray-800">
@@ -234,19 +45,27 @@ export class Sidebar {
             placeholder="Search ${this.channels.length} channels..."
             value="${this.searchQuery}"
             class="w-full px-3 py-2 bg-gray-700 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-            id="sidebar-search-input"
+            id="sidebar-search"
           />
         </div>
         
         <!-- Channel list -->
-        <div class="flex-1 overflow-y-auto">
-          ${liveChannels.length > 0 ? this.renderChannelSection('LIVE NOW', liveChannels, 'orange-500', true) : ''}
-          ${offlineChannels.length > 0 ? this.renderChannelSection('OFFLINE', offlineChannels, 'gray-400', false) : ''}
+        <div class="flex-1 overflow-y-auto custom-scrollbar">
+          ${liveChannels.length > 0 ? this.renderSection('LIVE NOW', liveChannels, 'live', true) : ''}
+          ${offlineChannels.length > 0 ? this.renderSection('OFFLINE', offlineChannels, 'offline', false) : ''}
           
           ${filteredChannels.length === 0 ? `
             <div class="p-8 text-center text-gray-400">
               <div class="text-4xl mb-2">🔍</div>
               <p>${this.searchQuery ? 'No channels match your search' : 'No channels yet'}</p>
+              ${!this.searchQuery && this.onAddChannel ? `
+                <button
+                  id="empty-add-btn"
+                  class="mt-4 px-4 py-2 bg-orange-500 rounded hover:bg-orange-600 transition"
+                >
+                  Add Your First Channel
+                </button>
+              ` : ''}
             </div>
           ` : ''}
         </div>
@@ -255,166 +74,173 @@ export class Sidebar {
         <div class="p-4 border-t border-gray-700 bg-gray-750">
           ${this.onAddChannel ? `
             <button
-              id="sidebar-add-channel-btn"
-              class="w-full px-4 py-2 bg-orange-500 rounded hover:bg-orange-600 font-semibold mb-2 transition"
+              id="add-channel-btn"
+              class="w-full px-4 py-2 bg-orange-500 rounded hover:bg-orange-600 font-semibold transition flex items-center justify-center gap-2"
             >
-              + Add Channel
+              <span class="text-lg">+</span>
+              Add Channel
             </button>
           ` : ''}
           
-          <div class="text-xs text-gray-400 text-center">
+          <div class="text-xs text-gray-400 text-center mt-2">
             ${this.channels.length} channel${this.channels.length !== 1 ? 's' : ''} tracked
+            ${liveChannels.length > 0 ? ` • ${liveChannels.length} live` : ''}
           </div>
         </div>
       </div>
-    `;
+    `
 
-    // Add event listeners
-    this.mountEventListeners();
+    // Attach event listeners AFTER render
+    this.attachEventListeners()
     
-    // Mount channel lists with proper timing
-    setTimeout(() => {
-      this.mountChannelLists();
-    }, 10);
+    // Mount channel lists
+    requestAnimationFrame(() => {
+      this.mountChannelLists(liveChannels, offlineChannels)
+    })
   }
 
-  renderChannelSection(title, channels, color, isLive) {
-    const safeId = `channel-list-${title.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+  renderSection(title, channels, id, isLive) {
+    const color = isLive ? 'orange-500' : 'gray-400'
     
     return `
       <div class="border-b border-gray-700">
-        <div class="p-4 pb-2">
-          <h3 class="text-sm font-semibold text-${color} mb-2 flex items-center">
+        <div class="px-4 py-3 bg-gray-750">
+          <h3 class="text-sm font-semibold text-${color} flex items-center">
             ${isLive ? '<span class="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse"></span>' : ''}
-            ${title} (${channels.length})
+            ${title}
+            <span class="ml-2 text-xs bg-gray-700 px-2 py-0.5 rounded-full">${channels.length}</span>
           </h3>
         </div>
-        <div id="${safeId}" class="px-2 pb-2"></div>
+        <div id="channel-list-${id}" class="px-2 py-2"></div>
       </div>
-    `;
+    `
   }
 
-  mountEventListeners() {
-  const searchInput = document.getElementById('sidebar-search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const prevValue = this.searchQuery;
-      const prevCursor = e.target.selectionStart;
-      this.searchQuery = e.target.value;
-
-      // Debounce the render to avoid losing cursor focus
-      if (this.renderTimeout) clearTimeout(this.renderTimeout);
-      this.renderTimeout = setTimeout(() => {
-        this.render();
-
-        // Restore focus and cursor position after re-render
-        setTimeout(() => {
-          const newSearchInput = document.getElementById('sidebar-search-input');
-          if (newSearchInput) {
-            newSearchInput.focus();
-            // Calculate new cursor position based on input changes
-            const diff = newSearchInput.value.length - prevValue.length;
-            let newCursor = prevCursor + diff;
-            if (newCursor < 0) newCursor = 0;
-            if (newCursor > newSearchInput.value.length) newCursor = newSearchInput.value.length;
-            newSearchInput.setSelectionRange(newCursor, newCursor);
-          }
-        }, 0);
-      }, 300);
-    });
-  
-
-      // Also handle key events to track cursor position
-      // searchInput.addEventListener('keyup', (e) => {
-      //   cursorPosition = e.target.selectionStart;
-      // });
-
-      // searchInput.addEventListener('click', (e) => {
-      //   cursorPosition = e.target.selectionStart;
-      // });
+  attachEventListeners() {
+    // Search input - simple approach without debouncing
+    const searchInput = document.getElementById('sidebar-search')
+    if (searchInput) {
+      // Store reference to prevent losing focus
+      searchInput.addEventListener('input', (e) => {
+        this.searchQuery = e.target.value
+        
+        // Update filtered lists without full re-render
+        this.updateFilteredLists()
+      })
     }
 
     // Add channel button
-    const addChannelBtn = document.getElementById('sidebar-add-channel-btn');
-    if (addChannelBtn && this.onAddChannel) {
-      addChannelBtn.addEventListener('click', () => {
-        this.showAddChannelModal();
-      });
+    const addBtn = document.getElementById('add-channel-btn')
+    if (addBtn) {
+      addBtn.addEventListener('click', () => this.showAddChannelModal())
+    }
+
+    // Empty state add button
+    const emptyAddBtn = document.getElementById('empty-add-btn')
+    if (emptyAddBtn) {
+      emptyAddBtn.addEventListener('click', () => this.showAddChannelModal())
     }
   }
 
-  mountChannelLists() {
-    console.log('[Sidebar] Mounting channel lists...');
-    
+  updateFilteredLists() {
+    // Filter channels based on search
+    const filteredChannels = this.channels.filter(channel =>
+      channel.channelTitle.toLowerCase().includes(this.searchQuery.toLowerCase())
+    )
+
+    const liveChannels = filteredChannels.filter(channel =>
+      this.liveStatus[channel.channelId]?.isLive
+    )
+
+    const offlineChannels = filteredChannels.filter(channel =>
+      !this.liveStatus[channel.channelId]?.isLive
+    )
+
+    // Update only the channel lists, not the entire sidebar
+    this.mountChannelLists(liveChannels, offlineChannels)
+  }
+
+  mountChannelLists(liveChannels, offlineChannels) {
     // Mount live channels
-    const liveContainer = document.getElementById('channel-list-live-now');
-    if (liveContainer) {
-      const liveChannels = this.channels.filter(ch => this.liveStatus[ch.channelId]?.isLive);
-      console.log('[Sidebar] Mounting', liveChannels.length, 'live channels');
-      
-      const channelList = new ChannelList();
-      channelList.mount(liveContainer);
-      channelList.channels = liveChannels;
-      channelList.liveStatus = this.liveStatus;
-      channelList.activeChannel = this.activeChannel;
-      channelList.onChannelSelect = this.onChannelSelect;
-      channelList.onRemoveChannel = this.onRemoveChannel;
+    const liveContainer = document.getElementById('channel-list-live')
+    if (liveContainer && liveChannels.length > 0) {
+      const list = new ChannelList()
+      list.channels = liveChannels
+      list.liveStatus = this.liveStatus
+      list.activeChannel = this.activeChannel
+      list.onChannelSelect = this.onChannelSelect
+      list.onRemoveChannel = this.onRemoveChannel
+      list.mount(liveContainer)
     }
 
     // Mount offline channels
-    const offlineContainer = document.getElementById('channel-list-offline');
-    if (offlineContainer) {
-      const offlineChannels = this.channels.filter(ch => !this.liveStatus[ch.channelId]?.isLive);
-      console.log('[Sidebar] Mounting', offlineChannels.length, 'offline channels');
-      
-      const channelList = new ChannelList();
-      channelList.mount(offlineContainer);
-      channelList.channels = offlineChannels;
-      channelList.liveStatus = this.liveStatus;
-      channelList.activeChannel = this.activeChannel;
-      channelList.onChannelSelect = this.onChannelSelect;
-      channelList.onRemoveChannel = this.onRemoveChannel;
+    const offlineContainer = document.getElementById('channel-list-offline')
+    if (offlineContainer && offlineChannels.length > 0) {
+      const list = new ChannelList()
+      list.channels = offlineChannels
+      list.liveStatus = this.liveStatus
+      list.activeChannel = this.activeChannel
+      list.onChannelSelect = this.onChannelSelect
+      list.onRemoveChannel = this.onRemoveChannel
+      list.mount(offlineContainer)
     }
   }
 
   showAddChannelModal() {
-    const channelUrl = prompt('Enter YouTube Channel URL or ID:\n\nExamples:\n• https://www.youtube.com/@ChannelName\n• UCxxxxxxxxxxxxxxxxxxxxxx');
+    // Simple modal using prompt (can be enhanced later)
+    const examples = [
+      'Examples:',
+      '• https://www.youtube.com/@NASA',
+      '• https://www.youtube.com/channel/UCxxxxxx',
+      '• UCxxxxxx (just the ID)',
+      '',
+      'Try these test channels:',
+      '• NASA: UCLA_DiR1FfKNvjuUpBHmylQ',
+      '• SpaceX: UCtI0Hodo5o5dUb67FeUjDeA'
+    ].join('\n')
+
+    const input = prompt(`Enter YouTube Channel URL or ID:\n\n${examples}`)
     
-    if (channelUrl) {
-      this.addChannelFromInput(channelUrl);
+    if (input && input.trim()) {
+      this.processChannelInput(input.trim())
     }
   }
 
-  addChannelFromInput(input) {
+  async processChannelInput(input) {
     let channelId = '';
-    let channelTitle = 'New Channel';
-    let thumbnailUrl = '';
 
+    // Extract channel ID from various formats
     if (input.includes('youtube.com/channel/')) {
-      channelId = input.split('youtube.com/channel/')[1]?.split(/[\/?]/)[0] || input;
+      channelId = input.split('youtube.com/channel/')[1]?.split(/[/?#]/)[0];
     } else if (input.includes('youtube.com/@')) {
-      channelId = input.split('youtube.com/@')[1]?.split(/[\/?]/)[0] || input;
+      const handle = input.split('youtube.com/@')[1]?.split(/[/?#]/)[0];
+      // For now, just use the handle as-is (ideally resolve to channel ID via API)
+      channelId = handle;
     } else if (input.startsWith('UC') && input.length > 20) {
       channelId = input;
     } else {
       channelId = input;
     }
 
-    channelId = channelId.trim();
-
     if (!channelId) {
-      alert('Please enter a valid YouTube Channel URL or ID');
+      alert('Invalid channel URL or ID');
       return;
     }
 
+    // Create channel object
     const channelData = {
       channelId: channelId,
-      channelTitle: channelTitle,
-      thumbnailUrl: thumbnailUrl || `https://via.placeholder.com/48/374151/FFFFFF?text=YT`
+      channelTitle: channelId, // Will be updated by backend
+      thumbnailUrl: `https://via.placeholder.com/48/374151/FFFFFF?text=YT`
     };
 
+    // Call parent handler
     if (this.onAddChannel) {
-      this.onAddChannel(channelData);
+      try {
+        await this.onAddChannel(channelData);
+      } catch (error) {
+        alert(`Failed to add channel: ${error.message}`);
+      }
     }
   }
 }
