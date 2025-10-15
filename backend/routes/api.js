@@ -13,17 +13,13 @@ const router = express.Router();
 // Middleware: Check authentication
 function requireAuth(req, res, next) {
   if (!req.session.userId || !req.session.userDbId) {
-    console.log('[Auth] No valid session found:', {
-      userId: req.session.userId,
-      userDbId: req.session.userDbId
-    });
+    console.log('[Auth] No valid session found');
     return res.status(401).json({ error: 'Unauthorized - please log in again' });
   }
   
-  // Set req.user for compatibility with user.js routes
   req.user = {
-    id: req.session.userDbId, // Use the database ID
-    google_id: req.session.userId
+    id: req.session.userDbId,        // ✅ Database ID
+    google_id: req.session.userId    // ✅ Google ID
   };
   
   next();
@@ -42,17 +38,28 @@ router.get('/auth/session', (req, res) => {
 router.post('/channels/track', requireAuth, async (req, res) => {
   try {
     const { channelId, channelTitle, thumbnailUrl } = req.body;
-    const userId = req.session.userId;
-
-    // Ensure user is authenticated
-    if (!userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
+    
+    // ✅ FIX: Use the database user ID, not Google ID
+    const userDbId = req.session.userDbId || req.user.id;
+    
+    if (!userDbId) {
+      console.error('[POST /channels/track] No userDbId in session');
+      return res.status(401).json({ error: 'User not properly authenticated' });
     }
+    
+    // Validate input
+    if (!channelId || !channelTitle) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: channelId and channelTitle' 
+      });
+    }
+    
+    console.log(`[POST /channels/track] User ${userDbId} adding channel ${channelId}`);
     
     // Check channel limit (5 for free tier)
     const countResult = await db.query(
       'SELECT COUNT(*) as count FROM user_channels WHERE user_id = $1',
-      [userId]
+      [userDbId]  // ✅ Use database ID
     );
     
     const channelCount = parseInt(countResult.rows[0].count);
@@ -67,17 +74,25 @@ router.post('/channels/track', requireAuth, async (req, res) => {
       `INSERT INTO user_channels (user_id, channel_id, channel_title, thumbnail_url)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, channel_id) DO NOTHING`,
-      [userId, channelId, channelTitle, thumbnailUrl]
+      [userDbId, channelId, channelTitle, thumbnailUrl]  // ✅ Use database ID
     );
+    
+    console.log(`✅ Channel ${channelId} tracked for user ${userDbId}`);
     
     // Subscribe to RSS feed
     await subscribeToChannel(channelId);
     
-    res.json({ success: true });
+    res.json({ 
+      success: true, 
+      message: `Channel ${channelTitle} added successfully` 
+    });
     
   } catch (error) {
-    console.error('Error tracking channel:', error);
-    res.status(500).json({ error: 'Failed to track channel' });
+    console.error('[POST /channels/track] Error:', error);
+    res.status(500).json({ 
+      error: 'Failed to track channel',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -85,12 +100,11 @@ router.post('/channels/track', requireAuth, async (req, res) => {
 router.delete('/channels/:channelId/untrack', requireAuth, async (req, res) => {
   try {
     const { channelId } = req.params;
-    const userId = req.session.userId;
+    const userDbId = req.user.id;  // ✅ Use database ID
     
-    // Remove from user_channels
     await db.query(
       'DELETE FROM user_channels WHERE user_id = $1 AND channel_id = $2',
-      [userId, channelId]
+      [userDbId, channelId]  // ✅ Use database ID
     );
     
     // Check if any other users are tracking this channel
@@ -99,7 +113,6 @@ router.delete('/channels/:channelId/untrack', requireAuth, async (req, res) => {
       [channelId]
     );
     
-    // If no one else is tracking, unsubscribe from RSS
     if (parseInt(otherUsers.rows[0].count) === 0) {
       await unsubscribeFromChannel(channelId);
     }
@@ -230,7 +243,7 @@ router.get('/chat/:videoId/messages', requireAuth, async (req, res) => {
 // GET /api/notifications - Get user's notifications
 router.get('/notifications', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userDbId = req.user.id;  // ✅ Use database ID
     
     const result = await db.query(
       `SELECT id, channel_id, video_id, message, read, created_at
@@ -238,7 +251,7 @@ router.get('/notifications', requireAuth, async (req, res) => {
        WHERE user_id = $1
        ORDER BY created_at DESC
        LIMIT 50`,
-      [userId]
+      [userDbId]  // ✅ Use database ID
     );
     
     const notifications = result.rows.map(row => ({
@@ -263,11 +276,11 @@ router.get('/notifications', requireAuth, async (req, res) => {
 // POST /api/notifications/mark-read - Mark all notifications as read
 router.post('/notifications/mark-read', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userDbId = req.user.id;  // ✅ Use database ID
     
     await db.query(
       'UPDATE notifications SET read = TRUE WHERE user_id = $1',
-      [userId]
+      [userDbId]  // ✅ Use database ID
     );
     
     res.json({ success: true });
