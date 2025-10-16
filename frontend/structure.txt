@@ -94,5 +94,7 @@ live-multi-channel/
 │   └── backup.sh
 │
 ├── .gitignore
+├── dump.rdb
+├── LICENSE
 ├── README.md
-└── LICENSE
+└── vercel.json
