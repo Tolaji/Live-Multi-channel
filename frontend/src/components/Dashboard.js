@@ -252,30 +252,23 @@ export class Dashboard {
     }
   }
 
+  // In Dashboard.js handleLogout method
   async handleLogout() {
     console.log('[Dashboard] Logout initiated')
     
     try {
-      // Stop polling before logout
       this.stopLiveStatusPolling()
       
-      // Try simple logout endpoint
-      const response = await fetch(`${apiClient.backendUrl}/api/auth/simple-logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-      })
+      // Clear current mode from storage
+      localStorage.removeItem('preferred-mode')
       
-      if (!response.ok) {
-        console.warn('[Dashboard] Simple logout failed, trying fallback')
-        await fetch(`${apiClient.backendUrl}/auth/logout`, {
+      // Perform logout based on current mode
+      if (apiClient.isRSSMode()) {
+        await fetch(`${apiClient.backendUrl}/api/auth/simple-logout`, {
           method: 'POST',
           credentials: 'include'
         })
-      }
-      
-      // Clear API key if in user-key mode
-      if (apiClient.isUserKeyMode()) {
+      } else if (apiClient.isUserKeyMode()) {
         await apiClient.clearStoredAPIKey()
       }
       
@@ -283,12 +276,11 @@ export class Dashboard {
       localStorage.clear()
       sessionStorage.clear()
       
-      // Redirect to home
+      // Redirect to root to restart mode selection
       window.location.href = window.location.origin
       
     } catch (error) {
       console.error('[Dashboard] Logout error:', error)
-      // Emergency cleanup
       localStorage.clear()
       sessionStorage.clear()
       window.location.href = window.location.origin
@@ -316,6 +308,30 @@ export class Dashboard {
         <div class="flex-1 flex flex-col">
           <!-- Header -->
           <header class="bg-gray-800 px-6 py-4 flex items-center justify-between border-b border-gray-700">
+
+            // Add to Dashboard.js render() method in header section
+            <div class="flex items-center gap-3">
+              <!-- Mode Switch Button -->
+              <button
+                id="switch-mode-btn"
+                class="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm transition flex items-center gap-2"
+                title="Switch authentication mode"
+              >
+                🔄 Switch Mode
+              </button>
+              
+              <button
+                id="refresh-btn"
+                ${this.statusLoading ? 'disabled' : ''}
+                class="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 disabled:opacity-50 text-sm transition flex items-center gap-2"
+                title="Refresh live status (R)"
+              >
+                <span class="${this.statusLoading ? 'animate-spin' : ''}">↻</span>
+                Refresh
+              </button>
+              <!-- ... rest of header ... -->
+            </div>
+
             <div>
               <h1 class="text-xl font-bold">Live Multi-Channel</h1>
               <p class="text-sm text-gray-400">

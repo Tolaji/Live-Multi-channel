@@ -47,7 +47,14 @@ export function configureHelmet(app) {
         scriptSrc: ["'self'", "'unsafe-inline'", "https://www.youtube.com", "https://apis.google.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "https:", "http:"],
-        connectSrc: ["'self'", "https://www.googleapis.com", "https://pubsubhubbub.appspot.com"],
+        connectSrc: [
+          "'self'",
+          "https://www.googleapis.com",
+          "https://pubsubhubbub.appspot.com",
+          process.env.FRONTEND_URL,
+          "https://live-multi-channel.onrender.com"
+        ],
+
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         frameSrc: ["https://www.youtube.com", "https://accounts.google.com"],
         objectSrc: ["'none'"],
@@ -78,26 +85,31 @@ export function validateVideoId(videoId) {
 }
 
 // CORS configuration
+// backend/middleware/security.js
 export const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'http://localhost:5173',
       'http://localhost:5173',
-      'http://localhost:3000'
+      'http://localhost:3000',
+      'https://live-multi-channel.onrender.com',
+      'https://live-multi-channel.vercel.app'
     ];
-    
-    // Allow requests with no origin (like mobile apps or curl requests)
+
+    // Allow requests with no origin (like curl, mobile apps, etc.)
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
+
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`🚫 Blocked CORS request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true,
+  credentials: true, // important for cookies/session
   optionsSuccessStatus: 200
 };
+
 
 // SQL injection prevention (parameterized queries example)
 export async function safeQuery(db, query, params) {
