@@ -1,4 +1,6 @@
-// Dashboard.js - Complete rewrite with proper data flow
+// frontend/src/components/Dashboard.js
+// Enhanced with Switch Mode dropdown
+
 import { io } from 'socket.io-client';
 import apiClient from '../services/apiClients.js'
 import { Sidebar } from './Sidebar.js'
@@ -6,7 +8,6 @@ import { LivePlayer } from './LivePlayer.js'
 import { NotificationBell } from './NotificationBell.js'
 import { toast } from './Toast.js'
 import { rssClient } from '../services/rssClient.js'
-
 
 export class Dashboard {
   constructor() {
@@ -19,7 +20,10 @@ export class Dashboard {
     this.statusLoading = false
     this.sidebar = null
     this.pollInterval = null
-    // In Dashboard constructor
+    this.onLogout = null
+    this.onSwitchMode = null
+    this.showModeSwitcher = false
+    
     this.socket = io(apiClient.backendUrl)
     this.socket.on('channel-live', (data) => {
       this.liveStatus[data.channelId] = data.status
@@ -34,15 +38,10 @@ export class Dashboard {
     }
     this.container = container
     
-    // Initial render with loading state
     this.render()
-    
-    // Load channels and start polling
     await this.loadChannels()
     this.startLiveStatusPolling()
     this.setupKeyboardShortcuts()
-    
-    // Final render with data
     this.render()
   }
 
@@ -53,7 +52,6 @@ export class Dashboard {
     try {
       console.log('[Dashboard] Loading channels...')
       
-      // Fetch channels based on mode
       if (apiClient.isUserKeyMode()) {
         this.channels = await apiClient.fetchSubscriptions()
       } else if (apiClient.isRSSMode()) {
@@ -63,8 +61,6 @@ export class Dashboard {
       }
       
       console.log(`[Dashboard] Loaded ${this.channels.length} channels`)
-      
-      // Immediately fetch live status for all channels
       await this.refreshAllLiveStatus()
       
     } catch (error) {
@@ -92,20 +88,14 @@ export class Dashboard {
     })
     
     const results = await Promise.all(statusPromises)
-    
-    // Update liveStatus object
     const newLiveStatus = {}
     results.forEach(({ channelId, status }) => {
       newLiveStatus[channelId] = status
     })
     
-    // Detect newly live channels for notifications
     this.detectNewLiveChannels(newLiveStatus)
-    
     this.liveStatus = newLiveStatus
     console.log('[Dashboard] Live status updated:', this.liveStatus)
-    
-    // Re-render to show updated status
     this.render()
   }
 
@@ -120,7 +110,6 @@ export class Dashboard {
           console.log(`[Dashboard] ${channel.channelTitle} just went LIVE!`)
           toast.show(`🔴 ${channel.channelTitle} is now LIVE!`, 'success', 5000)
           
-          // Browser notification if permitted
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('Live Stream Started', {
               body: `${channel.channelTitle} is now streaming!`,
@@ -133,11 +122,10 @@ export class Dashboard {
   }
 
   startLiveStatusPolling() {
-    // Poll every 2 minutes
     this.pollInterval = setInterval(() => {
       console.log('[Dashboard] Polling for live status updates...')
       this.refreshAllLiveStatus()
-    }, 120000) // 2 minutes
+    }, 120000)
     
     console.log('[Dashboard] Live status polling started (2 min interval)')
   }
@@ -167,6 +155,7 @@ export class Dashboard {
         this.render()
       } else if (event.key === 'Escape') {
         this.showChat = false
+        this.showModeSwitcher = false
         this.render()
       }
     })
@@ -217,9 +206,7 @@ export class Dashboard {
         channelData.thumbnailUrl
       )
       
-      // Reload channels to get fresh data from backend
       await this.loadChannels()
-      
       toast.show(`Added channel: ${channelData.channelTitle}`, 'success')
     } catch (error) {
       console.error('[Dashboard] handleAddChannel error:', error)
@@ -234,11 +221,9 @@ export class Dashboard {
       
       await rssClient.removeChannel(channelId)
       
-      // Remove from local state
       this.channels = this.channels.filter(ch => ch.channelId !== channelId)
       delete this.liveStatus[channelId]
       
-      // Clear active channel if it was removed
       if (this.activeChannel?.channelId === channelId) {
         this.activeChannel = null
         this.activeVideoId = null
@@ -252,38 +237,22 @@ export class Dashboard {
     }
   }
 
-  // In Dashboard.js handleLogout method
-  async handleLogout() {
-    console.log('[Dashboard] Logout initiated')
-    
-    try {
-      this.stopLiveStatusPolling()
-      
-      // Clear current mode from storage
-      localStorage.removeItem('preferred-mode')
-      
-      // Perform logout based on current mode
-      if (apiClient.isRSSMode()) {
-        await fetch(`${apiClient.backendUrl}/api/auth/simple-logout`, {
-          method: 'POST',
-          credentials: 'include'
-        })
-      } else if (apiClient.isUserKeyMode()) {
-        await apiClient.clearStoredAPIKey()
-      }
-      
-      // Clear all storage
-      localStorage.clear()
-      sessionStorage.clear()
-      
-      // Redirect to root to restart mode selection
-      window.location.href = window.location.origin
-      
-    } catch (error) {
-      console.error('[Dashboard] Logout error:', error)
-      localStorage.clear()
-      sessionStorage.clear()
-      window.location.href = window.location.origin
+  toggleModeSwitcher() {
+    this.showModeSwitcher = !this.showModeSwitcher
+    this.render()
+  }
+
+  handleSwitchModeClick() {
+    this.showModeSwitcher = false
+    if (this.onSwitchMode) {
+      this.onSwitchMode()
+    }
+  }
+
+  handleLogoutClick() {
+    this.showModeSwitcher = false
+    if (this.onLogout) {
+      this.onLogout()
     }
   }
 
@@ -298,48 +267,20 @@ export class Dashboard {
       return
     }
 
-    // Main layout structure
+    const currentMode = apiClient.isUserKeyMode() ? 'API Key' : 'RSS'
+    const liveCount = Object.values(this.liveStatus).filter(s => s.isLive).length
+
     this.container.innerHTML = `
       <div class="flex h-screen bg-gray-900 text-white">
-        <!-- Sidebar -->
         <div id="dashboard-sidebar" class="w-80 bg-gray-800 border-r border-gray-700"></div>
         
-        <!-- Main content area -->
         <div class="flex-1 flex flex-col">
-          <!-- Header -->
           <header class="bg-gray-800 px-6 py-4 flex items-center justify-between border-b border-gray-700">
-
-            // Add to Dashboard.js render() method in header section
-            <div class="flex items-center gap-3">
-              <!-- Mode Switch Button -->
-              <button
-                id="switch-mode-btn"
-                class="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm transition flex items-center gap-2"
-                title="Switch authentication mode"
-              >
-                🔄 Switch Mode
-              </button>
-              
-              <button
-                id="refresh-btn"
-                ${this.statusLoading ? 'disabled' : ''}
-                class="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 disabled:opacity-50 text-sm transition flex items-center gap-2"
-                title="Refresh live status (R)"
-              >
-                <span class="${this.statusLoading ? 'animate-spin' : ''}">↻</span>
-                Refresh
-              </button>
-              <!-- ... rest of header ... -->
-            </div>
-
             <div>
               <h1 class="text-xl font-bold">Live Multi-Channel</h1>
               <p class="text-sm text-gray-400">
-                ${apiClient.isUserKeyMode() ? '🔑 Using your API key' : '📡 RSS Mode'}
-                • ${this.channels.length} channels
-                ${Object.values(this.liveStatus).filter(s => s.isLive).length > 0 
-                  ? `• ${Object.values(this.liveStatus).filter(s => s.isLive).length} live now` 
-                  : ''}
+                ${currentMode} Mode • ${this.channels.length} channels
+                ${liveCount > 0 ? `• ${liveCount} live now` : ''}
               </p>
             </div>
             <div class="flex items-center gap-3">
@@ -353,17 +294,48 @@ export class Dashboard {
                 Refresh
               </button>
               <div id="notification-bell"></div>
-              <button
-                id="logout-btn"
-                class="px-3 py-2 bg-red-600 rounded hover:bg-red-700 text-sm transition"
-                title="Logout"
-              >
-                Logout
-              </button>
+              
+              <div class="relative">
+                <button
+                  id="mode-switcher-btn"
+                  class="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm transition flex items-center gap-2"
+                  title="Mode options"
+                >
+                  🔄 ${currentMode} ▼
+                </button>
+                
+                ${this.showModeSwitcher ? `
+                  <div class="absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+                    <div class="px-4 py-3 border-b border-gray-700">
+                      <div class="text-xs text-gray-400 uppercase font-semibold">Current Mode</div>
+                      <div class="text-sm font-medium mt-1">✓ ${currentMode} Mode</div>
+                    </div>
+                    
+                    <div class="py-2">
+                      <button
+                        id="switch-mode-btn"
+                        class="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-sm flex items-center gap-2"
+                      >
+                        <span>🔄</span>
+                        <span>Switch to ${currentMode === 'API Key' ? 'RSS' : 'API Key'} Mode</span>
+                      </button>
+                    </div>
+                    
+                    <div class="border-t border-gray-700 py-2">
+                      <button
+                        id="logout-from-dropdown"
+                        class="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-sm flex items-center gap-2 text-red-400"
+                      >
+                        <span>🚪</span>
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
             </div>
           </header>
           
-          <!-- Main content -->
           <main class="flex-1 overflow-hidden">
             <div id="main-content" class="h-full"></div>
           </main>
@@ -371,11 +343,27 @@ export class Dashboard {
       </div>
     `
 
-    // Mount components
+    // Close dropdown on outside click
+    if (this.showModeSwitcher) {
+      setTimeout(() => {
+        document.addEventListener('click', this.handleOutsideClick.bind(this), { once: true })
+      }, 0)
+    }
+
     this.mountSidebar()
     this.mountNotificationBell()
     this.mountMainContent()
     this.attachEventListeners()
+  }
+
+  handleOutsideClick(event) {
+    const dropdown = document.querySelector('.absolute.right-0.mt-2')
+    const button = document.getElementById('mode-switcher-btn')
+    
+    if (dropdown && button && !dropdown.contains(event.target) && !button.contains(event.target)) {
+      this.showModeSwitcher = false
+      this.render()
+    }
   }
 
   mountSidebar() {
@@ -429,9 +417,22 @@ export class Dashboard {
       refreshBtn.addEventListener('click', () => this.refreshStatus())
     }
 
-    const logoutBtn = document.getElementById('logout-btn')
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', () => this.handleLogout())
+    const modeSwitcherBtn = document.getElementById('mode-switcher-btn')
+    if (modeSwitcherBtn) {
+      modeSwitcherBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.toggleModeSwitcher()
+      })
+    }
+
+    const switchModeBtn = document.getElementById('switch-mode-btn')
+    if (switchModeBtn) {
+      switchModeBtn.addEventListener('click', () => this.handleSwitchModeClick())
+    }
+
+    const logoutFromDropdown = document.getElementById('logout-from-dropdown')
+    if (logoutFromDropdown) {
+      logoutFromDropdown.addEventListener('click', () => this.handleLogoutClick())
     }
   }
 

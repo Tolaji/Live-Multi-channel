@@ -1,4 +1,6 @@
-// apiClients.js
+// frontend/src/services/apiClients.js
+// Enhanced with mode switching and full reset capabilities
+
 import { rssClient } from './rssClient.js'
 import { userKeyService } from './userKeyService.js'
 
@@ -9,7 +11,6 @@ class APIClient {
     this.isInitialized = false
   }
 
-  // apiClients.js - Enhanced initialization
   async initialize() {
     if (this.isInitialized) return this.mode
     
@@ -42,7 +43,7 @@ class APIClient {
       
     } catch (error) {
       console.error('[APIClient] Initialization failed:', error)
-      this.mode = 'login' // Fallback to login on error
+      this.mode = 'login'
       this.isInitialized = true
       return this.mode
     }
@@ -105,6 +106,63 @@ class APIClient {
     await userKeyService.clearAPIKey()
     this.mode = null
     this.isInitialized = false
+  }
+
+  // NEW: Switch mode without full reset
+  async switchMode() {
+    console.log('[APIClient] Switching mode...')
+    
+    try {
+      // Clear current mode authentication
+      if (this.mode === 'user-key') {
+        await userKeyService.clearAPIKey()
+      } else if (this.mode === 'rss') {
+        // Logout from RSS but preserve tracked channels on server
+        await fetch(`${this.backendUrl}/auth/logout`, {
+          method: 'POST',
+          credentials: 'include'
+        }).catch(err => console.warn('[APIClient] RSS logout failed:', err))
+      }
+      
+      // Clear session storage but NOT localStorage (preserve preferences)
+      sessionStorage.clear()
+      
+      // Reset state
+      this.mode = null
+      this.isInitialized = false
+      
+      console.log('[APIClient] Mode switch completed')
+      
+    } catch (error) {
+      console.error('[APIClient] Switch mode error:', error)
+      throw error
+    }
+  }
+
+  // NEW: Full reset (logout)
+  async fullReset() {
+    console.log('[APIClient] Performing full reset...')
+    
+    try {
+      // Clear user-key if present
+      await userKeyService.clearAPIKey()
+      
+      // Logout from RSS
+      await fetch(`${this.backendUrl}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      }).catch(err => console.warn('[APIClient] Logout request failed:', err))
+      
+      // Reset state
+      this.mode = null
+      this.isInitialized = false
+      
+      console.log('[APIClient] Full reset completed')
+      
+    } catch (error) {
+      console.error('[APIClient] Full reset error:', error)
+      throw error
+    }
   }
 }
 

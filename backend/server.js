@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import http from 'http';
 import { Server as SocketIO } from 'socket.io';
+import passport from 'passport';
 
 import session from 'express-session';
 import { createClient } from 'redis';
@@ -36,7 +37,9 @@ import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import webhookRoutes from './routes/webhooks.js';
 import healthRoutes from './routes/health.js';
-import userRoutes from './routes/user.js'
+import userRoutes from './routes/user.js';
+import userChannelsRoutes from './routes/userChannels.js'; 
+
 
 // Load environment variables
 dotenv.config();
@@ -120,6 +123,10 @@ const csrfMiddleware = (req, res, next) => {
   return csrfProtection(req, res, next);
 };
 
+// Passport initialization
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.use(csrfMiddleware);
 app.use(injectCSRFToken);
 
@@ -140,10 +147,10 @@ app.get('/', (req, res) => {
 // Auth routes
 app.use('/auth', authRoutes);
 
-app.use('/api/user', userRoutes)
-
 // API routes (require auth)
 app.use('/api', apiRoutes);
+app.use('/api/user', userRoutes)
+app.use('/api/user/channels', userChannelsRoutes);
 
 // CSRF token endpoint for frontend
 app.get('/api/csrf-token', csrfProtection, (req, res) => {
