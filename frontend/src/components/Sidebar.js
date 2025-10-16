@@ -1,5 +1,6 @@
 // Sidebar.js - Simplified and bulletproof
 import { ChannelList } from './ChannelList.js'
+import { rssClient } from '../services/rssClient.js'
 
 export class Sidebar {
   constructor() {
@@ -206,41 +207,33 @@ export class Sidebar {
     }
   }
 
+  // In Sidebar.js, update the processChannelInput method to be more robust:
   async processChannelInput(input) {
-    let channelId = '';
-
-    // Extract channel ID from various formats
-    if (input.includes('youtube.com/channel/')) {
-      channelId = input.split('youtube.com/channel/')[1]?.split(/[/?#]/)[0];
-    } else if (input.includes('youtube.com/@')) {
-      const handle = input.split('youtube.com/@')[1]?.split(/[/?#]/)[0];
-      // For now, just use the handle as-is (ideally resolve to channel ID via API)
-      channelId = handle;
-    } else if (input.startsWith('UC') && input.length > 20) {
-      channelId = input;
-    } else {
-      channelId = input;
-    }
-
-    if (!channelId) {
-      alert('Invalid channel URL or ID');
-      return;
-    }
-
-    // Create channel object
-    const channelData = {
-      channelId: channelId,
-      channelTitle: channelId, // Will be updated by backend
-      thumbnailUrl: `https://via.placeholder.com/48/374151/FFFFFF?text=YT`
-    };
-
-    // Call parent handler
-    if (this.onAddChannel) {
-      try {
-        await this.onAddChannel(channelData);
-      } catch (error) {
-        alert(`Failed to add channel: ${error.message}`);
+    try {
+      // Extract channel ID using the rssClient method
+      const channelId = await rssClient.extractChannelId(input);
+      
+      if (!channelId) {
+        alert('Invalid channel URL or ID');
+        return;
       }
+
+      console.log('[Sidebar] Extracted channel ID:', channelId);
+
+      // Create channel object with proper data
+      const channelData = {
+        channelId: channelId,
+        channelTitle: `Channel ${channelId}`, // Backend will update this
+        thumbnailUrl: null // Backend will provide proper thumbnail
+      };
+
+      // Call parent handler
+      if (this.onAddChannel) {
+        await this.onAddChannel(channelData);
+      }
+    } catch (error) {
+      console.error('[Sidebar] Channel ID extraction error:', error);
+      alert(`Error: ${error.message}\n\nValid examples:\n• UC_x5XG1OV2P6uZZ5FSM9Ttw\n• https://www.youtube.com/channel/UC_x5XG1OV2P6uZZ5FSM9Ttw`);
     }
   }
 }

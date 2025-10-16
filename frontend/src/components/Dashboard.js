@@ -23,13 +23,28 @@ export class Dashboard {
     this.onLogout = null
     this.onSwitchMode = null
     this.showModeSwitcher = false
+    this.socket = null
     
-    this.socket = io(apiClient.backendUrl)
-    this.socket.on('channel-live', (data) => {
-      this.liveStatus[data.channelId] = data.status
-      this.render()
-    })
+    // this.socket = io(apiClient.backendUrl)
+    // this.socket.on('channel-live', (data) => {
+    //   this.liveStatus[data.channelId] = data.status
+    //   this.render()
+    // })
   }
+
+  // async mount(container) {
+  //   if (!container) {
+  //     console.error('[Dashboard] mount failed: container is null')
+  //     return
+  //   }
+  //   this.container = container
+    
+  //   this.render()
+  //   await this.loadChannels()
+  //   this.startLiveStatusPolling()
+  //   this.setupKeyboardShortcuts()
+  //   this.render()
+  // }
 
   async mount(container) {
     if (!container) {
@@ -40,37 +55,87 @@ export class Dashboard {
     
     this.render()
     await this.loadChannels()
+
+    // --- Socket.io live updates (RSS mode only) ---
+    if (apiClient.isRSSMode()) {
+      this.socket = io(apiClient.backendUrl, {
+        withCredentials: true,
+        transports: ['websocket', 'polling']
+      })
+
+      this.socket.on('connect', () => {
+        console.log('[Dashboard] Socket connected')
+      })
+
+      // Buffer for debouncing multiple events
+      this._liveUpdateBuffer = {}
+      this._liveUpdateTimer = null
+
+      this.socket.on('channel-live', (data) => {
+        console.log('[Dashboard] Realtime update received:', data)
+        this._liveUpdateBuffer[data.channelId] = data.status
+
+        // Debounce updates (wait 1s before applying all)
+        clearTimeout(this._liveUpdateTimer)
+        this._liveUpdateTimer = setTimeout(() => {
+          const updates = { ...this._liveUpdateBuffer }
+          this._liveUpdateBuffer = {}
+
+          this.detectNewLiveChannels(updates)
+          Object.entries(updates).forEach(([channelId, status]) => {
+            this.liveStatus[channelId] = status
+          })
+
+          console.log('[Dashboard] Live status updated via socket:', updates)
+          this.render()
+        }, 1000)
+      })
+
+      this.socket.on('disconnect', (reason) => {
+        console.log('[Dashboard] Socket disconnected:', reason)
+      })
+    }
+    // ----------------------------------------------
+
     this.startLiveStatusPolling()
     this.setupKeyboardShortcuts()
     this.render()
   }
 
+
   async loadChannels() {
-    this.loading = true
-    this.render()
+    this.loading = true;
+    this.render();
     
     try {
-      console.log('[Dashboard] Loading channels...')
+      console.log('[Dashboard] Loading channels...');
       
       if (apiClient.isUserKeyMode()) {
-        this.channels = await apiClient.fetchSubscriptions()
+        this.channels = await apiClient.fetchSubscriptions();
       } else if (apiClient.isRSSMode()) {
-        this.channels = await rssClient.fetchTrackedChannels()
+        this.channels = await rssClient.fetchTrackedChannels();
       } else {
-        throw new Error('No valid authentication mode')
+        throw new Error('No valid authentication mode');
       }
       
-      console.log(`[Dashboard] Loaded ${this.channels.length} channels`)
-      await this.refreshAllLiveStatus()
+      console.log(`[Dashboard] Loaded ${this.channels.length} channels`);
+      
+      // Clean up any invalid channels that might have been stored
+      const hadInvalidChannels = this.cleanupInvalidChannels();
+      if (hadInvalidChannels) {
+        console.log('[Dashboard] Invalid channels were cleaned up');
+      }
+      
+      await this.refreshAllLiveStatus();
       
     } catch (error) {
-      console.error('[Dashboard] loadChannels error:', error)
-      toast.show(`Failed to load channels: ${error.message}`, 'error')
-      this.channels = []
-      this.liveStatus = {}
+      console.error('[Dashboard] loadChannels error:', error);
+      toast.show(`Failed to load channels: ${error.message}`, 'error');
+      this.channels = [];
+      this.liveStatus = {};
     } finally {
-      this.loading = false
-      this.render()
+      this.loading = false;
+      this.render();
     }
   }
 
@@ -78,12 +143,18 @@ export class Dashboard {
     console.log('[Dashboard] Refreshing live status for all channels...')
     
     const statusPromises = this.channels.map(async (channel) => {
+      // Skip invalid channel IDs (URLs instead of IDs)
+      if (!channel.channelId.startsWith('UC') || channel.channelId.length !== 24) {
+        console.warn(`[Dashboard] Skipping invalid channel ID: ${channel.channelId}`)
+        return { channelId: channel.channelId, status: { isLive: false, error: 'Invalid channel ID' } }
+      }
+      
       try {
         const status = await apiClient.checkChannelLiveStatus(channel.channelId)
         return { channelId: channel.channelId, status }
       } catch (error) {
         console.warn(`[Dashboard] Failed to get status for ${channel.channelTitle}:`, error)
-        return { channelId: channel.channelId, status: { isLive: false } }
+        return { channelId: channel.channelId, status: { isLive: false, error: error.message } }
       }
     })
     
@@ -140,7 +211,19 @@ export class Dashboard {
 
   unmount() {
     this.stopLiveStatusPolling()
+
+    if (this.socket) {
+      this.socket.disconnect()
+      this.socket = null
+      console.log('[Dashboard] Socket disconnected on unmount')
+    }
+
+    if (this._liveUpdateTimer) {
+      clearTimeout(this._liveUpdateTimer)
+      this._liveUpdateTimer = null
+    }
   }
+
 
   setupKeyboardShortcuts() {
     document.addEventListener('keydown', (event) => {
@@ -214,27 +297,94 @@ export class Dashboard {
     }
   }
 
+  // In Dashboard.js, update the handleRemoveChannel method:
   async handleRemoveChannel(channelId) {
     try {
-      const channel = this.channels.find(ch => ch.channelId === channelId)
-      console.log('[Dashboard] Removing channel:', channel?.channelTitle)
+      const channel = this.channels.find(ch => ch.channelId === channelId);
       
-      await rssClient.removeChannel(channelId)
-      
-      this.channels = this.channels.filter(ch => ch.channelId !== channelId)
-      delete this.liveStatus[channelId]
-      
-      if (this.activeChannel?.channelId === channelId) {
-        this.activeChannel = null
-        this.activeVideoId = null
+      // Validate channel ID before attempting removal
+      if (!channelId.startsWith('UC') || channelId.length !== 24) {
+        console.warn('[Dashboard] Invalid channel ID format for removal:', channelId);
+        
+        // Remove from local state anyway to clean up invalid data
+        this.channels = this.channels.filter(ch => ch.channelId !== channelId);
+        delete this.liveStatus[channelId];
+        
+        if (this.activeChannel?.channelId === channelId) {
+          this.activeChannel = null;
+          this.activeVideoId = null;
+        }
+        
+        toast.show(`Removed invalid channel: ${channel?.channelTitle || channelId}`, 'warning');
+        this.render();
+        return;
       }
       
-      toast.show(`Removed channel: ${channel?.channelTitle || channelId}`, 'success')
-      this.render()
+      console.log('[Dashboard] Removing channel:', channel?.channelTitle);
+      
+      // Only call the API for valid channel IDs
+      await rssClient.removeChannel(channelId);
+      
+      // Update local state
+      this.channels = this.channels.filter(ch => ch.channelId !== channelId);
+      delete this.liveStatus[channelId];
+      
+      if (this.activeChannel?.channelId === channelId) {
+        this.activeChannel = null;
+        this.activeVideoId = null;
+      }
+      
+      toast.show(`Removed channel: ${channel?.channelTitle || channelId}`, 'success');
+      this.render();
     } catch (error) {
-      console.error('[Dashboard] handleRemoveChannel error:', error)
-      toast.show(`Failed to remove channel: ${error.message}`, 'error')
+      console.error('[Dashboard] handleRemoveChannel error:', error);
+      
+      // Even if API call fails, remove from local state
+      this.channels = this.channels.filter(ch => ch.channelId !== channelId);
+      delete this.liveStatus[channelId];
+      
+      if (this.activeChannel?.channelId === channelId) {
+        this.activeChannel = null;
+        this.activeVideoId = null;
+      }
+      
+      toast.show(`Removed channel from local state: ${channelId?.channelTitle || channelId}`, 'warning');
+      this.render();
     }
+  }
+
+  async cleanupInvalidChannels() {
+    const validChannels = [];
+    const invalidChannels = [];
+    
+    this.channels.forEach(channel => {
+      if (channel.channelId.startsWith('UC') && channel.channelId.length === 24) {
+        validChannels.push(channel);
+      } else {
+        invalidChannels.push(channel);
+        console.warn('[Dashboard] Removing invalid channel ID:', channel.channelId, channel.channelTitle);
+      }
+    });
+    
+    if (invalidChannels.length > 0) {
+      console.log(`[Dashboard] Cleaned up ${invalidChannels.length} invalid channels`);
+      this.channels = validChannels;
+      
+      // Also clean up liveStatus
+      invalidChannels.forEach(channel => {
+        delete this.liveStatus[channel.channelId];
+      });
+      
+      // Update active channel if it was invalid
+      if (this.activeChannel && !validChannels.includes(this.activeChannel)) {
+        this.activeChannel = null;
+        this.activeVideoId = null;
+      }
+      
+      return true;
+    }
+    
+    return false;
   }
 
   toggleModeSwitcher() {

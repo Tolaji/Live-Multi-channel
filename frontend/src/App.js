@@ -330,8 +330,8 @@ export class App {
     }
     
     try {
-      // FIXED: Use your existing auth logout endpoint
-      await fetch(`${apiClient.backendUrl}/auth/logout`, {
+      // Use the simple logout endpoint that works
+      await fetch(`${apiClient.backendUrl}/api/auth/simple-logout`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -357,8 +357,6 @@ export class App {
       this.mode = null
       this.loading = false
       this.isInitialized = false
-      apiClient.mode = null
-      apiClient.isInitialized = false
       
       // Show mode selector
       this.render()

@@ -9,15 +9,7 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
-
 const { Pool } = pg;
-
-// Debug logs
-console.log('env DATABASE_URL =', process.env.DATABASE_URL);
-console.log('env DB_PASSWORD =', process.env.DB_PASSWORD);
-console.log('typeof DATABASE_URL =', typeof process.env.DATABASE_URL);
-console.log('typeof DB_PASSWORD =', typeof process.env.DB_PASSWORD);
-
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
@@ -29,7 +21,7 @@ const pool = new Pool({
 const expectedTables = [
   'users',
   'user_channels',
-  'user_tracked_channels', // ✅ corrected spelling
+  'user_tracked_channels',
   'rss_subscriptions',
   'live_events',
   'notifications',
@@ -39,7 +31,6 @@ const expectedTables = [
 
 async function ensureTables(client) {
   console.log('🧩 Ensuring all expected tables exist...');
-
   const res = await client.query(`
     SELECT table_name 
     FROM information_schema.tables 
@@ -104,24 +95,49 @@ async function ensureTables(client) {
   }
 }
 
+async function normalizeChannelIds(client) {
+  console.log('🔍 Checking for malformed channel IDs...');
+  const tables = ['user_channels', 'live_events', 'notifications'];
+
+  for (const table of tables) {
+    const res = await client.query(`
+      SELECT id, channel_id FROM ${table}
+      WHERE channel_id LIKE 'http%' OR channel_id LIKE 'www.youtube%';
+    `);
+
+    if (res.rows.length === 0) {
+      console.log(`✅ No malformed channel IDs found in ${table}.`);
+      continue;
+    }
+
+    console.log(`⚠️ Found ${res.rows.length} malformed entries in ${table}. Fixing...`);
+
+    for (const row of res.rows) {
+      let channelId = row.channel_id;
+      const match = channelId.match(/channel\/([A-Za-z0-9_-]{20,})/);
+
+      if (match) {
+        channelId = match[1];
+        await client.query(
+          `UPDATE ${table} SET channel_id = $1 WHERE id = $2`,
+          [channelId, row.id]
+        );
+        console.log(`✅ Fixed ${table} row id=${row.id} → ${channelId}`);
+      } else {
+        console.warn(`❌ Could not extract channel ID from: ${row.channel_id}`);
+      }
+    }
+  }
+}
+
 async function fixChannelIds() {
   const client = await pool.connect();
   try {
-    console.log('🔧 Starting channel_id fix and table verification...');
+    console.log('🔧 Starting table verification and channel_id fix...');
     await client.query('BEGIN');
 
-    // 1️⃣ Ensure all expected tables exist
     await ensureTables(client);
-
-    // 2️⃣ Fix channel_id column data types
-    const tablesWithChannelId = ['user_channels', 'live_events', 'notifications'];
-    for (const table of tablesWithChannelId) {
-      await client.query(`
-        ALTER TABLE ${table}
-        ALTER COLUMN channel_id TYPE VARCHAR(255);
-      `);
-      console.log(`✅ Fixed ${table}.channel_id`);
-    }
+    await normalizeChannelIds(client);
 
     await client.query('COMMIT');
     console.log('🎉 Migration repairs and fixes completed successfully!');

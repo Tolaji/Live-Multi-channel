@@ -94,7 +94,54 @@ class RSSClient {
     }
   }
 
-  async addChannel(channelId, channelTitle, thumbnailUrl) {
+  // frontend/src/services/rssClient.js or in Sidebar.js
+  async extractChannelId(input) {
+    // If it's already a valid channel ID (starts with UC and 24 chars)
+    if (input.startsWith('UC') && input.length === 24) {
+      return input;
+    }
+    
+    try {
+      const url = new URL(input.includes('://') ? input : `https://${input}`);
+      
+      // Handle different YouTube URL formats
+      if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
+        // Channel URL format: youtube.com/channel/UC...
+        if (url.pathname.startsWith('/channel/')) {
+          const channelId = url.pathname.split('/channel/')[1];
+          if (channelId && channelId.startsWith('UC') && channelId.length === 24) {
+            return channelId;
+          }
+        }
+        
+        // Handle URL format: youtube.com/watch?v=...
+        if (url.pathname === '/watch' && url.searchParams.get('v')) {
+          throw new Error('Please provide a channel URL or ID, not a video URL');
+        }
+        
+        // Handle custom URL format: youtube.com/@username
+        if (url.pathname.startsWith('/@')) {
+          throw new Error('Please provide the channel ID (starts with UC), not the username');
+        }
+      }
+    } catch (e) {
+      // If URL parsing fails, check if it might be a channel ID
+      if (input.startsWith('UC') && input.length === 24) {
+        return input;
+      }
+      throw new Error('Invalid channel URL or ID format');
+    }
+    
+    throw new Error('Could not extract valid channel ID. Please use format: UCxxxxxxxxxxxxxxxxxxxx');
+  }
+
+  // Use it before adding:
+  async addChannel(input, channelTitle = `Unknown Channel`, thumbnailUrl = null) {
+    const channelId = await this.extractChannelId(input);
+  //   // ... rest of your code
+  // }
+
+//   async addChannel(channelId, channelTitle, thumbnailUrl) {
     if (!this.isAuthenticated) {
       throw new Error('Not authenticated in RSS mode')
     }

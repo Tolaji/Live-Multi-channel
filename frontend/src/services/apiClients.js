@@ -144,25 +144,29 @@ class APIClient {
     console.log('[APIClient] Performing full reset...')
     
     try {
-      // Clear user-key if present
-      await userKeyService.clearAPIKey()
-      
-      // Logout from RSS
-      await fetch(`${this.backendUrl}/auth/logout`, {
+      // Use the working logout endpoint
+      await fetch(`${this.backendUrl}/api/auth/simple-logout`, {
         method: 'POST',
-        credentials: 'include'
-      }).catch(err => console.warn('[APIClient] Logout request failed:', err))
-      
-      // Reset state
-      this.mode = null
-      this.isInitialized = false
-      
-      console.log('[APIClient] Full reset completed')
-      
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }).catch(err => {
+        console.warn('[APIClient] Logout request failed:', err)
+      })
     } catch (error) {
-      console.error('[APIClient] Full reset error:', error)
-      throw error
+      console.warn('[APIClient] Logout error:', error)
     }
+    
+    // Clear all stored data
+    localStorage.removeItem('youtube_api_key')
+    sessionStorage.clear()
+    
+    this.mode = null
+    this.isInitialized = false
+    this.userKeyService.clearAPIKey()
+    
+    console.log('[APIClient] Full reset completed')
   }
 }
 
