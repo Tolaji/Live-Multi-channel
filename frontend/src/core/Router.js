@@ -45,20 +45,24 @@ export class Router {
   }
 
   handleTokenLogin(token) {
-    console.log('[Router] JWT token received, storing...');
-    
-    // Store JWT in localStorage
-    localStorage.setItem('auth_token', token);
-    
-    // Show success toast
-    if (window.toast) {
-      window.toast.show('Successfully signed in!', 'success');
-    }
-    
-    // Clean URL and reload to initialize RSS mode
-    this.cleanUrl();
-    window.location.reload();
+  console.log('[Router] JWT token received, storing...');
+  
+  // Store JWT in localStorage
+  localStorage.setItem('auth_token', token);
+  
+  // Show success toast
+  if (window.toast) {
+    window.toast.show('Successfully signed in!', 'success');
   }
+  
+  // Clean URL and reload to initialize RSS mode
+  this.cleanUrl();
+  
+  // Small delay to ensure toast is visible
+  setTimeout(() => {
+    window.location.reload();
+  }, 1000);
+}
 
   handleAuthError(errorType) {
     console.log('[Router] Auth error detected:', errorType);

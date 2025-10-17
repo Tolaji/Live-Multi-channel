@@ -64,25 +64,36 @@ router.get('/callback', async (req, res) => {
         name: user.name
       },
       process.env.SESSION_SECRET,
-      { expiresIn: '7d' } // 7 days validity
+      { expiresIn: '7d' }
     );
     
     console.log(`✅ User logged in: ${user.email} (ID: ${user.id})`);
     
-    // Redirect to frontend with token
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    // Redirect to appropriate frontend URL
+    const frontendUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://live-multi-channel.vercel.app'
+      : 'http://localhost:5173';
+    
     res.redirect(`${frontendUrl}/?token=${token}&login=success`);
     
   } catch (error) {
     console.error('Auth error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.NODE_ENV === 'production'
+      ? 'https://live-multi-channel.vercel.app'
+      : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/?auth_error=auth_failed`);
   }
 });
 
 // Logout route (just clears token on frontend)
 router.post('/logout', (req, res) => {
-  res.json({ success: true, message: 'Logged out successfully' });
+  // With JWT, logout is handled on frontend by removing token
+  // This endpoint just confirms the logout request
+  console.log('User logged out via simple-logout endpoint');
+  res.json({ 
+    success: true, 
+    message: 'Logged out successfully (JWT token should be removed from client)' 
+  });
 });
 
 // Verify token and get user session

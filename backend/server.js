@@ -87,20 +87,21 @@ const redisClient = createClient({
 app.use(cookieParser());
 
 // Session configuration
+// In backend/server.js - update the session config
 app.use(session({
   store: new RedisStore({ client: redisClient }),
-  secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-production',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  name: 'lmc.sid', // Custom name to avoid conflicts
+  name: 'lmc.sid',
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    secure: process.env.NODE_ENV === 'production', // true in production
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' required for cross-domain
-    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Don't set domain - let browser handle it
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-site
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Don't set domain
   },
-  proxy: process.env.NODE_ENV === 'production' // Trust proxy in production
+  proxy: true // Trust proxy in production
 }));
 
 // Rate limiting

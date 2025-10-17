@@ -89,25 +89,24 @@ export function validateVideoId(videoId) {
 export const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'https://live-multi-channel.vercel.app',
       'http://localhost:5173',
-      'http://localhost:3000',
-      'https://live-multi-channel.onrender.com',
-      'https://live-multi-channel.vercel.app'
+      'http://localhost:3000'
     ];
 
-    // Allow requests with no origin (like curl, mobile apps, etc.)
+    // Allow requests with no origin (like mobile apps, curl requests)
     if (!origin) return callback(null, true);
-
+    
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`🚫 Blocked CORS request from origin: ${origin}`);
+      console.log(`🚫 Blocked CORS request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, // important for cookies/session
-  optionsSuccessStatus: 200
+  credentials: true, // IMPORTANT: This allows cookies/auth headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
 };
 
 

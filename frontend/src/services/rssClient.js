@@ -1,6 +1,10 @@
 class RSSClient {
   constructor() {
-    this.backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    // Use environment variable with fallback for production
+    this.backendUrl = import.meta.env.VITE_BACKEND_URL || 
+      (window.location.hostname.includes('vercel.app') 
+        ? 'https://live-multi-channel.onrender.com' 
+        : 'http://localhost:3000')
     this.isAuthenticated = false;
   }
 
