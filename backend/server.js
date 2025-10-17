@@ -92,12 +92,15 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
+  name: 'lmc.sid', // Custom name to avoid conflicts
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-  }
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' required for cross-domain
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Don't set domain - let browser handle it
+  },
+  proxy: process.env.NODE_ENV === 'production' // Trust proxy in production
 }));
 
 // Rate limiting
