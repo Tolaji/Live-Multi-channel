@@ -149,7 +149,9 @@ router.get('/callback', async (req, res) => {
   } catch (error) {
     console.error('Auth error:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/login?error=auth_failed`);
+    
+    // Redirect to the root (mode selector) with error in hash or query param
+    res.redirect(`${frontendUrl}/?auth_error=auth_failed`);
   }
 });
 

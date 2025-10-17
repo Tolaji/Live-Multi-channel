@@ -1,34 +1,84 @@
+// In Router.js, add error handling
 export class Router {
   constructor() {
-    this.routes = new Map()
-    this.currentPath = window.location.pathname
+    this.routes = [];
+    this.currentPath = window.location.pathname;
   }
 
   addRoute(path, handler) {
-    this.routes.set(path, handler)
-  }
-
-  start() {
-    window.addEventListener('popstate', () => {
-      this.currentPath = window.location.pathname
-      this.handleRoute()
-    })
-
-    this.handleRoute()
+    this.routes.push({ path, handler });
   }
 
   handleRoute() {
-    for (const [path, handler] of this.routes) {
-      if (path === '*' || this.currentPath === path) {
-        handler()
-        break
-      }
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
+    
+    // Check for auth errors
+    const authError = urlParams.get('auth_error') || hashParams.get('auth_error');
+    if (authError) {
+      this.handleAuthError(authError);
+      return;
+    }
+    
+    // Check for login success
+    const loginSuccess = urlParams.get('login') === 'success';
+    if (loginSuccess) {
+      this.handleLoginSuccess();
+      return;
+    }
+
+    const currentRoute = this.routes.find(route => 
+      route.path === '*' || route.path === this.currentPath
+    );
+    
+    if (currentRoute) {
+      currentRoute.handler();
     }
   }
 
-  navigate(path) {
-    window.history.pushState({}, '', path)
-    this.currentPath = path
-    this.handleRoute()
+  handleAuthError(errorType) {
+    console.log('[Router] Auth error detected:', errorType);
+    
+    // Show error toast
+    if (window.toast) {
+      let message = 'Authentication failed';
+      if (errorType === 'auth_failed') {
+        message = 'Google authentication failed. Please try again.';
+      }
+      window.toast.show(message, 'error');
+    }
+    
+    // Clean URL
+    this.cleanUrl();
+  }
+
+  handleLoginSuccess() {
+    console.log('[Router] Login success detected');
+    
+    // Show success toast
+    if (window.toast) {
+      window.toast.show('Successfully signed in!', 'success');
+    }
+    
+    // Clean URL and reload to initialize RSS mode
+    this.cleanUrl();
+    window.location.reload();
+  }
+
+  cleanUrl() {
+    // Remove query parameters from URL without reloading
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
+  start() {
+    // Handle initial route
+    this.handleRoute();
+    
+    // Listen for URL changes
+    window.addEventListener('popstate', () => {
+      this.currentPath = window.location.pathname;
+      this.handleRoute();
+    });
   }
 }
