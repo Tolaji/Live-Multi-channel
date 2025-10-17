@@ -1,40 +1,14 @@
-// backend/routes/api.js
+// backend/routes/api.js - FIXED FOR JWT
 
 import express from 'express';
+import { requireAuth } from '../middleware/auth.js'; // ✅ USE GLOBAL JWT MIDDLEWARE
 import { subscribeToChannel, unsubscribeFromChannel } from '../services/rssFeedService.js';
 import { searchChannelForLiveStreams } from '../services/youtubeService.js';
 import db from '../config/database.js';
-// import redis from '../config/redis.js';
-import { createClient } from 'redis'; 
-
 
 const router = express.Router();
 
-// Middleware: Check authentication
-function requireAuth(req, res, next) {
-  if (!req.session.userId || !req.session.userDbId) {
-    console.log('[Auth] No valid session found');
-    return res.status(401).json({ error: 'Unauthorized - please log in again' });
-  }
-  
-  req.user = {
-    id: req.session.userDbId,        // ✅ Database ID
-    google_id: req.session.userId    // ✅ Google ID
-  };
-  
-  next();
-}
-
-// GET /api/auth/session - Check if user is authenticated
-router.get('/auth/session', (req, res) => {
-  if (req.session.userId) {
-    res.json({ authenticated: true, userId: req.session.userId });
-  } else {
-    res.status(401).json({ authenticated: false });
-  }
-});
-
-// GET /api/channels/resolve-video-id?videoId=... - Resolve Channel ID from Video ID
+// GET /api/channels/resolve-video-id - Resolve Channel ID from Video ID
 router.get('/channels/resolve-video-id', requireAuth, async (req, res) => {
   try {
     const { videoId } = req.query;
@@ -45,34 +19,32 @@ router.get('/channels/resolve-video-id', requireAuth, async (req, res) => {
 
     const apiKey = process.env.YOUTUBE_API_KEY;
     if (!apiKey) {
-      console.error('YOUTUBE_API_KEY is not set in environment variables.');
-      return res.status(500).json({ error: 'Server configuration error: Missing YouTube API Key.' });
+      console.error('YOUTUBE_API_KEY is not set');
+      return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    // Call YouTube Data API (videos endpoint) to get the snippet, which contains the channelId
     const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&fields=items(snippet(channelId))&key=${apiKey}`;
     const response = await fetch(apiUrl);
 
     if (!response.ok) {
-      // Forward the error from Google's API
       const errorData = await response.json().catch(() => ({}));
-      console.error(`[API] YouTube API failed to resolve video ${videoId}:`, errorData);
-      return res.status(502).json({ error: 'Failed to retrieve video details from YouTube.' });
+      console.error(`[API] YouTube API failed for video ${videoId}:`, errorData);
+      return res.status(502).json({ error: 'Failed to retrieve video details' });
     }
 
     const data = await response.json();
 
-    if (data.items && data.items.length > 0 && data.items[0].snippet && data.items[0].snippet.channelId) {
+    if (data.items?.[0]?.snippet?.channelId) {
       const channelId = data.items[0].snippet.channelId;
       console.log(`[API] Resolved video ${videoId} to Channel ID: ${channelId}`);
       return res.json({ channelId });
     }
 
-    return res.status(404).json({ error: 'Video not found or Channel ID could not be extracted.' });
+    return res.status(404).json({ error: 'Video not found' });
 
   } catch (error) {
     console.error('[GET /channels/resolve-video-id] Error:', error);
-    res.status(500).json({ error: 'Internal server error during channel resolution.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -80,16 +52,8 @@ router.get('/channels/resolve-video-id', requireAuth, async (req, res) => {
 router.post('/channels/track', requireAuth, async (req, res) => {
   try {
     const { channelId, channelTitle, thumbnailUrl } = req.body;
+    const userDbId = req.user.id; // ✅ JWT provides this
     
-    // ✅ FIX: Use the database user ID, not Google ID
-    const userDbId = req.session.userDbId || req.user.id;
-    
-    if (!userDbId) {
-      console.error('[POST /channels/track] No userDbId in session');
-      return res.status(401).json({ error: 'User not properly authenticated' });
-    }
-    
-    // Validate input
     if (!channelId || !channelTitle) {
       return res.status(400).json({ 
         error: 'Missing required fields: channelId and channelTitle' 
@@ -101,7 +65,7 @@ router.post('/channels/track', requireAuth, async (req, res) => {
     // Check channel limit (5 for free tier)
     const countResult = await db.query(
       'SELECT COUNT(*) as count FROM user_channels WHERE user_id = $1',
-      [userDbId]  // ✅ Use database ID
+      [userDbId]
     );
     
     const channelCount = parseInt(countResult.rows[0].count);
@@ -116,7 +80,7 @@ router.post('/channels/track', requireAuth, async (req, res) => {
       `INSERT INTO user_channels (user_id, channel_id, channel_title, thumbnail_url)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, channel_id) DO NOTHING`,
-      [userDbId, channelId, channelTitle, thumbnailUrl]  // ✅ Use database ID
+      [userDbId, channelId, channelTitle, thumbnailUrl]
     );
     
     console.log(`✅ Channel ${channelId} tracked for user ${userDbId}`);
@@ -142,11 +106,11 @@ router.post('/channels/track', requireAuth, async (req, res) => {
 router.delete('/channels/:channelId/untrack', requireAuth, async (req, res) => {
   try {
     const { channelId } = req.params;
-    const userDbId = req.user.id;  // ✅ Use database ID
+    const userDbId = req.user.id; // ✅ JWT provides this
     
     await db.query(
       'DELETE FROM user_channels WHERE user_id = $1 AND channel_id = $2',
-      [userDbId, channelId]  // ✅ Use database ID
+      [userDbId, channelId]
     );
     
     // Check if any other users are tracking this channel
@@ -170,22 +134,16 @@ router.delete('/channels/:channelId/untrack', requireAuth, async (req, res) => {
 // GET /api/channels/tracked - Get user's tracked channels
 router.get('/channels/tracked', requireAuth, async (req, res) => {
   try {
-    // Use the database user ID, not the Google ID from session
-    const userDbId = req.session.userDbId;
+    const userDbId = req.user.id; // ✅ JWT provides this
     
-    if (!userDbId) {
-      console.error('[API] No userDbId in session');
-      return res.status(401).json({ error: 'User not properly authenticated' });
-    }
-    
-    console.log(`[API] Fetching tracked channels for database user ID: ${userDbId}`);
+    console.log(`[API] Fetching tracked channels for user ID: ${userDbId}`);
     
     const result = await db.query(
       `SELECT channel_id, channel_title, thumbnail_url, added_at
        FROM user_channels
        WHERE user_id = $1
        ORDER BY added_at DESC`,
-      [userDbId]  // Use the database user ID, not Google ID
+      [userDbId]
     );
     
     console.log(`[API] Found ${result.rows.length} channels for user ${userDbId}`);
@@ -213,18 +171,6 @@ router.get('/channels/:channelId/live-status', requireAuth, async (req, res) => 
   try {
     const { channelId } = req.params;
     const liveStatus = await searchChannelForLiveStreams(channelId);
-
-    
-    // For now, return offline status since we don't have Redis cache
-    // Real checks happen via RSS webhooks or fallback polling
-    // const cached = await redis.get(`live:${channelId}`);
-    // if (cached) {
-    //   return res.json(JSON.parse(cached));
-    // }
-    
-    // If not in cache, return offline status
-    // (Real checks happen via RSS webhooks or fallback polling)
-    // res.json({ isLive: false });
     res.json(liveStatus);
     
   } catch (error) {
@@ -237,12 +183,6 @@ router.get('/channels/:channelId/live-status', requireAuth, async (req, res) => 
 router.get('/chat/:videoId/messages', requireAuth, async (req, res) => {
   try {
     const { videoId } = req.params;
-    
-    // Check cache first
-    // const cached = await redis.get(`chat:${videoId}`);
-    // if (cached) {
-    //   return res.json(JSON.parse(cached));
-    // }
     
     // Fetch live chat ID
     const response = await fetch(
@@ -258,7 +198,7 @@ router.get('/chat/:videoId/messages', requireAuth, async (req, res) => {
     
     const liveChatId = video.liveStreamingDetails.activeLiveChatId;
     
-    // Fetch chat messages (costs 5 units)
+    // Fetch chat messages
     const chatResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet,authorDetails&maxResults=100&key=${process.env.YOUTUBE_API_KEY}`
     );
@@ -271,9 +211,6 @@ router.get('/chat/:videoId/messages', requireAuth, async (req, res) => {
       publishedAt: item.snippet.publishedAt
     }));
     
-    // Cache for 5 seconds
-    await redis.setex(`chat:${videoId}`, 5, JSON.stringify({ messages }));
-    
     res.json({ messages });
     
   } catch (error) {
@@ -285,7 +222,7 @@ router.get('/chat/:videoId/messages', requireAuth, async (req, res) => {
 // GET /api/notifications - Get user's notifications
 router.get('/notifications', requireAuth, async (req, res) => {
   try {
-    const userDbId = req.user.id;  // ✅ Use database ID
+    const userDbId = req.user.id; // ✅ JWT provides this
     
     const result = await db.query(
       `SELECT id, channel_id, video_id, message, read, created_at
@@ -293,7 +230,7 @@ router.get('/notifications', requireAuth, async (req, res) => {
        WHERE user_id = $1
        ORDER BY created_at DESC
        LIMIT 50`,
-      [userDbId]  // ✅ Use database ID
+      [userDbId]
     );
     
     const notifications = result.rows.map(row => ({
@@ -318,11 +255,11 @@ router.get('/notifications', requireAuth, async (req, res) => {
 // POST /api/notifications/mark-read - Mark all notifications as read
 router.post('/notifications/mark-read', requireAuth, async (req, res) => {
   try {
-    const userDbId = req.user.id;  // ✅ Use database ID
+    const userDbId = req.user.id; // ✅ JWT provides this
     
     await db.query(
       'UPDATE notifications SET read = TRUE WHERE user_id = $1',
-      [userDbId]  // ✅ Use database ID
+      [userDbId]
     );
     
     res.json({ success: true });
@@ -333,41 +270,11 @@ router.post('/notifications/mark-read', requireAuth, async (req, res) => {
   }
 });
 
-// Simple logout endpoint that doesn't depend on user.js
-router.post('/auth/simple-logout', (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('Logout error:', err);
-      return res.status(500).json({ error: 'Failed to logout' });
-    }
-    
-    res.clearCookie('connect.sid');
-    res.json({ success: true, message: 'Logged out successfully' });
-  });
-});
-
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
-});
-await redisClient.connect(); // Only if not already connected elsewhere
-
-// Redis test endpoint
-router.get('/test/redis', async (req, res) => {
-  try {
-    await redisClient.set('test-key', 'test-value', { EX: 5 });
-    const value = await redisClient.get('test-key');
-    res.json({ success: true, value });
-  } catch (error) {
-    res.status(500).json({ error: 'Redis test failed' });
-  }
-});
-
-// Test endpoint
+// Test endpoints
 router.get('/test', (req, res) => {
   res.json({ success: true, message: 'API test endpoint working!' });
 });
 
-// Database test endpoint
 router.get('/test/db', async (req, res) => {
   try {
     const result = await db.query('SELECT NOW()');
@@ -377,53 +284,13 @@ router.get('/test/db', async (req, res) => {
   }
 });
 
-router.get('/test/db-connection', async (req, res) => {
-  try {
-    const result = await db.query('SELECT NOW() as current_time, version() as version')
-    res.json({ 
-      success: true, 
-      dbTime: result.rows[0].current_time,
-      version: result.rows[0].version
-    })
-  } catch (error) {
-    console.error('Database connection test failed:', error)
-    res.status(500).json({ 
-      error: 'Database connection failed',
-      details: error.message 
-    })
-  }
-})
-
-// Add to api.js for debugging
-router.get('/debug/session', (req, res) => {
+// Debug endpoints
+router.get('/debug/jwt', requireAuth, (req, res) => {
   res.json({
-    session: req.session,
-    headers: req.headers,
-    authenticated: !!req.session.userId
+    authenticated: true,
+    user: req.user,
+    message: 'JWT authentication working!'
   });
-});
-
-router.get('/debug/users', async (req, res) => {
-  try {
-    const result = await db.query('SELECT id, google_id, email FROM users LIMIT 10');
-    res.json({ users: result.rows });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/debug/user-channels', async (req, res) => {
-  try {
-    const result = await db.query(`
-      SELECT uc.*, u.email 
-      FROM user_channels uc 
-      LEFT JOIN users u ON uc.user_id = u.id 
-      LIMIT 10
-    `);
-    res.json({ userChannels: result.rows });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 });
 
 export default router;
