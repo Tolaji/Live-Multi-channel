@@ -34,6 +34,48 @@ router.get('/auth/session', (req, res) => {
   }
 });
 
+// GET /api/channels/resolve-video-id?videoId=... - Resolve Channel ID from Video ID
+router.get('/channels/resolve-video-id', requireAuth, async (req, res) => {
+  try {
+    const { videoId } = req.query;
+
+    if (!videoId) {
+      return res.status(400).json({ error: 'Missing required field: videoId' });
+    }
+
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) {
+      console.error('YOUTUBE_API_KEY is not set in environment variables.');
+      return res.status(500).json({ error: 'Server configuration error: Missing YouTube API Key.' });
+    }
+
+    // Call YouTube Data API (videos endpoint) to get the snippet, which contains the channelId
+    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&fields=items(snippet(channelId))&key=${apiKey}`;
+    const response = await fetch(apiUrl);
+
+    if (!response.ok) {
+      // Forward the error from Google's API
+      const errorData = await response.json().catch(() => ({}));
+      console.error(`[API] YouTube API failed to resolve video ${videoId}:`, errorData);
+      return res.status(502).json({ error: 'Failed to retrieve video details from YouTube.' });
+    }
+
+    const data = await response.json();
+
+    if (data.items && data.items.length > 0 && data.items[0].snippet && data.items[0].snippet.channelId) {
+      const channelId = data.items[0].snippet.channelId;
+      console.log(`[API] Resolved video ${videoId} to Channel ID: ${channelId}`);
+      return res.json({ channelId });
+    }
+
+    return res.status(404).json({ error: 'Video not found or Channel ID could not be extracted.' });
+
+  } catch (error) {
+    console.error('[GET /channels/resolve-video-id] Error:', error);
+    res.status(500).json({ error: 'Internal server error during channel resolution.' });
+  }
+});
+
 // POST /api/channels/track - Add channel to tracking
 router.post('/channels/track', requireAuth, async (req, res) => {
   try {

@@ -94,39 +94,73 @@ class RSSClient {
     }
   }
 
+  /**
+   * Extracts a standardized 24-char YouTube Channel ID (UC...) from various inputs.
+   * Now resolves Channel ID from Video URLs using the secure backend endpoint.
+   * @param {string} input - The channel URL, video URL, or bare Channel ID.
+   * @returns {Promise<string>} The extracted 24-character Channel ID.
+   */
   async extractChannelId(input) {
-    if (input.startsWith('UC') && input.length === 24) {
-      return input;
+    const trimmedInput = input.trim();
+
+    // 1. Direct ID check (fastest)
+    if (trimmedInput.startsWith('UC') && trimmedInput.length === 24) {
+      return trimmedInput;
     }
     
+    let url;
     try {
-      const url = new URL(input.includes('://') ? input : `https://${input}`);
+      url = new URL(trimmedInput.includes('://') ? trimmedInput : `https://${trimmedInput}`);
       
-      if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
-        if (url.pathname.startsWith('/channel/')) {
-          const channelId = url.pathname.split('/channel/')[1];
-          if (channelId && channelId.startsWith('UC') && channelId.length === 24) {
-            return channelId;
+      const videoId = url.pathname === '/watch' ? url.searchParams.get('v') : null;
+
+      // 2. NEW LOGIC: Resolve Channel ID from a Video URL using the Backend
+      if (videoId) {
+          // Call the secure backend endpoint for API lookup
+          const resp = await fetch(
+              `${this.backendUrl}/api/channels/resolve-video-id?videoId=${videoId}`,
+              { headers: this.getAuthHeaders() }
+          );
+
+          if (!resp.ok) {
+              const errorData = await resp.json().catch(() => ({ error: 'Unknown backend error' }));
+              throw new Error(`Failed to resolve channel from video URL: ${errorData.error}`);
           }
-        }
-        
-        if (url.pathname === '/watch' && url.searchParams.get('v')) {
-          throw new Error('Please provide a channel URL or ID, not a video URL');
-        }
-        
-        if (url.pathname.startsWith('/@')) {
-          throw new Error('Please provide the channel ID (starts with UC), not the username');
+          
+          const data = await resp.json();
+          if (data.channelId) {
+              return data.channelId; // SUCCESS: Channel ID retrieved via backend API
+          }
+          // Should not happen if backend logic is correct, but safe fallback
+          throw new Error('Backend failed to return a Channel ID.');
+      }
+      
+      // 3. Existing logic: Check for /channel/ URL
+      if (url.pathname.startsWith('/channel/')) {
+        const channelId = url.pathname.split('/channel/')[1];
+        if (channelId && channelId.startsWith('UC') && channelId.length === 24) {
+          return channelId;
         }
       }
+      
+      // 4. Existing logic: Reject user/handle URLs
+      if (url.pathname.startsWith('/@') || url.pathname.startsWith('/user/')) {
+        throw new Error('Please provide the Channel ID (UC...) or a /channel/ URL.');
+      }
+
     } catch (e) {
-      if (input.startsWith('UC') && input.length === 24) {
-        return input;
-      }
-      throw new Error('Invalid channel URL or ID format');
+        // Re-throw specific errors (like failed API call)
+        if (e.message.includes('Failed to resolve')) {
+             throw e;
+        }
+        // Fall through for generic URL parsing errors
     }
     
-    throw new Error('Could not extract valid channel ID. Please use format: UCxxxxxxxxxxxxxxxxxxxx');
+    // 5. Final fallback
+    throw new Error('Invalid channel URL or ID format. Please use format: UCxxxxxxxxxxxxxxxxxxxx');
   }
+
+// ... rest of the RSSClient class ...
 
   async addChannel(input, channelTitle = `Unknown Channel`, thumbnailUrl = null) {
     const channelId = await this.extractChannelId(input);
