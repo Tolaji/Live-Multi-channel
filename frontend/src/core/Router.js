@@ -1,4 +1,5 @@
-// In Router.js, add error handling
+// frontend/src/core/Router.js
+
 export class Router {
   constructor() {
     this.routes = [];
@@ -12,6 +13,13 @@ export class Router {
   handleRoute() {
     const urlParams = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
+    
+    // Check for JWT token from OAuth redirect
+    const token = urlParams.get('token');
+    if (token) {
+      this.handleTokenLogin(token);
+      return;
+    }
     
     // Check for auth errors
     const authError = urlParams.get('auth_error') || hashParams.get('auth_error');
@@ -34,6 +42,22 @@ export class Router {
     if (currentRoute) {
       currentRoute.handler();
     }
+  }
+
+  handleTokenLogin(token) {
+    console.log('[Router] JWT token received, storing...');
+    
+    // Store JWT in localStorage
+    localStorage.setItem('auth_token', token);
+    
+    // Show success toast
+    if (window.toast) {
+      window.toast.show('Successfully signed in!', 'success');
+    }
+    
+    // Clean URL and reload to initialize RSS mode
+    this.cleanUrl();
+    window.location.reload();
   }
 
   handleAuthError(errorType) {
@@ -60,7 +84,7 @@ export class Router {
       window.toast.show('Successfully signed in!', 'success');
     }
     
-    // Clean URL and reload to initialize RSS mode
+    // Clean URL and reload
     this.cleanUrl();
     window.location.reload();
   }

@@ -330,14 +330,17 @@ export class App {
     }
     
     try {
-      // Use the simple logout endpoint that works
-      await fetch(`${apiClient.backendUrl}/api/auth/simple-logout`, {
+      // Call backend logout (optional, just for logging purposes)
+      await fetch(`${apiClient.backendUrl}/auth/logout`, {
         method: 'POST',
-        credentials: 'include',
         headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
         }
       }).catch(err => console.warn('[App] Logout request failed:', err))
+      
+      // Clear JWT token
+      localStorage.removeItem('auth_token')
       
       // Clear API client state
       await apiClient.fullReset()

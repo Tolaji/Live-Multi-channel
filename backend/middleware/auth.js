@@ -1,5 +1,5 @@
 // backend/middleware/auth.js
-
+import jwt from 'jsonwebtoken';
 import db from '../config/database.js';
 
 /**
@@ -8,39 +8,60 @@ import db from '../config/database.js';
  */
 export const requireAuth = async (req, res, next) => {
   try {
-    if (!req.session.userId) {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ 
-        error: 'Authentication required',
+        error: 'Authentication required - no token provided',
         code: 'UNAUTHENTICATED'
       });
     }
-
+    
+    const token = authHeader.split(' ')[1];
+    
+    // Verify JWT
+    const decoded = jwt.verify(token, process.env.SESSION_SECRET);
+    
     // Verify user still exists in database
     const userResult = await db.query(
-      'SELECT id, email, name, picture FROM users WHERE google_id = $1',
-      [req.session.userId]
+      'SELECT id, email, name, picture FROM users WHERE id = $1',
+      [decoded.userId]
     );
 
     if (userResult.rows.length === 0) {
-      // User no longer exists in database, clear session
-      req.session.destroy((err) => {
-        if (err) {
-          console.error('Error destroying invalid session:', err);
-        }
-      });
-      
       return res.status(401).json({ 
-        error: 'Session invalid - please login again',
+        error: 'User not found - please login again',
         code: 'SESSION_INVALID'
       });
     }
 
-    // Attach user info to request for easier access
-    req.user = userResult.rows[0];
+    // Attach user info to request
+    req.user = {
+      id: decoded.userId,
+      google_id: decoded.googleId,
+      email: decoded.email,
+      name: decoded.name
+    };
+    
     next();
     
   } catch (error) {
     console.error('Auth middleware error:', error);
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Token expired - please login again',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        error: 'Invalid token',
+        code: 'INVALID_TOKEN'
+      });
+    }
+    
     res.status(500).json({ 
       error: 'Authentication check failed',
       code: 'AUTH_CHECK_FAILED'
@@ -54,17 +75,24 @@ export const requireAuth = async (req, res, next) => {
  */
 export const optionalAuth = async (req, res, next) => {
   try {
-    if (req.session.userId) {
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.SESSION_SECRET);
+      
       const userResult = await db.query(
-        'SELECT id, email, name, picture FROM users WHERE google_id = $1',
-        [req.session.userId]
+        'SELECT id, email, name, picture FROM users WHERE id = $1',
+        [decoded.userId]
       );
 
       if (userResult.rows.length > 0) {
-        req.user = userResult.rows[0];
-      } else {
-        // User doesn't exist, clear invalid session
-        req.session.destroy();
+        req.user = {
+          id: decoded.userId,
+          google_id: decoded.googleId,
+          email: decoded.email,
+          name: decoded.name
+        };
       }
     }
     
@@ -216,7 +244,7 @@ export const userRateLimit = (windowMs, maxRequests) => {
 export const getCurrentUser = async (userId) => {
   try {
     const result = await db.query(
-      'SELECT id, google_id, email, name, picture, created_at FROM users WHERE google_id = $1',
+      'SELECT id, google_id, email, name, picture, created_at FROM users WHERE id = $1',
       [userId]
     );
     return result.rows[0] || null;
