@@ -144,7 +144,7 @@ router.get('/callback', async (req, res) => {
     
     // Redirect to frontend with success
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/dashboard?login=success`);
+    res.redirect(`${frontendUrl}?login=success`);
     
   } catch (error) {
     console.error('Auth error:', error);
