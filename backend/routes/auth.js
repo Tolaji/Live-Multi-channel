@@ -141,20 +141,37 @@ router.get('/callback', async (req, res) => {
     
     console.log(`✅ [Auth] JWT generated for user: ${user.email}`);
     
-    // Redirect to frontend with token
-    const redirectUrl = `${frontendUrl}/?token=${jwtToken}&login=success`;
-    // CRITICAL: Log the exact redirect URL (without exposing full token)
-        console.log('✅ [Auth] Redirecting to frontend:', {
-          url: redirectUrl.substring(0, 60) + '...',
-          tokenLength: jwtToken.length,
-          frontendUrl
-        });    
-    // res.redirect(redirectUrl);
-
-    // Add explicit headers to prevent caching/interception
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.redirect(307, redirectUrl); // 307 = Temporary Redirect (preserve method)
+    const frontendUrl = getFrontendUrl();
+    
+    // Instead of redirect, send HTML that posts message to opener window
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><title>Authenticating...</title></head>
+      <body>
+        <h1>Authentication successful!</h1>
+        <p>Redirecting you back to the app...</p>
+        <script>
+          const token = "${jwtToken}";
+          const frontendUrl = "${frontendUrl}";
+          
+          // Try postMessage first (for popup windows)
+          if (window.opener) {
+            window.opener.postMessage(
+              { type: 'AUTH_SUCCESS', token }, 
+              frontendUrl
+            );
+            window.close();
+          } else {
+            // Fallback to redirect
+            window.location.href = frontendUrl + "/?token=" + token + "&login=success";
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    
+    res.send(html);
     
   } catch (error) {
     console.error('❌ [Auth] Callback error:', error);
