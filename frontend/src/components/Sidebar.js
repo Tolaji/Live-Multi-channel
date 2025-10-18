@@ -1,6 +1,9 @@
-// Sidebar.js - Simplified and bulletproof
+// frontend/src/components/Sidebar.js
+// FIXED: Use the new addChannelFromInput API
+
 import { ChannelList } from './ChannelList.js'
 import { rssClient } from '../services/rssClient.js'
+import { toast } from './Toast.js'
 
 export class Sidebar {
   constructor() {
@@ -91,10 +94,8 @@ export class Sidebar {
       </div>
     `
 
-    // Attach event listeners AFTER render
     this.attachEventListeners()
     
-    // Mount channel lists
     requestAnimationFrame(() => {
       this.mountChannelLists(liveChannels, offlineChannels)
     })
@@ -118,25 +119,19 @@ export class Sidebar {
   }
 
   attachEventListeners() {
-    // Search input - simple approach without debouncing
     const searchInput = document.getElementById('sidebar-search')
     if (searchInput) {
-      // Store reference to prevent losing focus
       searchInput.addEventListener('input', (e) => {
         this.searchQuery = e.target.value
-        
-        // Update filtered lists without full re-render
         this.updateFilteredLists()
       })
     }
 
-    // Add channel button
     const addBtn = document.getElementById('add-channel-btn')
     if (addBtn) {
       addBtn.addEventListener('click', () => this.showAddChannelModal())
     }
 
-    // Empty state add button
     const emptyAddBtn = document.getElementById('empty-add-btn')
     if (emptyAddBtn) {
       emptyAddBtn.addEventListener('click', () => this.showAddChannelModal())
@@ -144,7 +139,6 @@ export class Sidebar {
   }
 
   updateFilteredLists() {
-    // Filter channels based on search
     const filteredChannels = this.channels.filter(channel =>
       channel.channelTitle.toLowerCase().includes(this.searchQuery.toLowerCase())
     )
@@ -157,12 +151,10 @@ export class Sidebar {
       !this.liveStatus[channel.channelId]?.isLive
     )
 
-    // Update only the channel lists, not the entire sidebar
     this.mountChannelLists(liveChannels, offlineChannels)
   }
 
   mountChannelLists(liveChannels, offlineChannels) {
-    // Mount live channels
     const liveContainer = document.getElementById('channel-list-live')
     if (liveContainer && liveChannels.length > 0) {
       const list = new ChannelList()
@@ -174,7 +166,6 @@ export class Sidebar {
       list.mount(liveContainer)
     }
 
-    // Mount offline channels
     const offlineContainer = document.getElementById('channel-list-offline')
     if (offlineContainer && offlineChannels.length > 0) {
       const list = new ChannelList()
@@ -188,52 +179,66 @@ export class Sidebar {
   }
 
   showAddChannelModal() {
-    // Simple modal using prompt (can be enhanced later)
     const examples = [
-      'Examples:',
-      '• https://www.youtube.com/@NASA',
-      '• https://www.youtube.com/channel/UCxxxxxx',
-      '• UCxxxxxx (just the ID)',
+      '📝 Supported formats:',
       '',
-      'Try these test channels:',
+      '• Channel ID: UC_x5XG1OV2P6uZZ5FSM9Ttw',
+      '• Channel URL: youtube.com/channel/UCxxxxxx',
+      '• Video URL: youtube.com/watch?v=xxxxxxx',
+      '',
+      '🧪 Test channels:',
       '• NASA: UCLA_DiR1FfKNvjuUpBHmylQ',
-      '• SpaceX: UCtI0Hodo5o5dUb67FeUjDeA'
+      '• SpaceX: UCtI0Hodo5o5dUb67FeUjDeA',
+      '• Lofi Girl: UCSJ4gkVC6NrvII8umztf0Ow'
     ].join('\n')
 
-    const input = prompt(`Enter YouTube Channel URL or ID:\n\n${examples}`)
+    const input = prompt(`Enter YouTube Channel URL, Video URL, or Channel ID:\n\n${examples}`)
     
     if (input && input.trim()) {
       this.processChannelInput(input.trim())
     }
   }
 
-  // In Sidebar.js, update the processChannelInput method to be more robust:
-  async processChannelInput(input) {
+  /**
+   * FIXED: Use the new addChannelFromInput API
+   * This method now properly extracts and validates the channel ID
+   */
+  async processChannelInput(userInput) {
     try {
-      // Extract channel ID using the rssClient method
-      const channelId = await rssClient.extractChannelId(input);
+      console.log('[Sidebar] Processing user input:', userInput)
       
-      if (!channelId) {
-        alert('Invalid channel URL or ID');
-        return;
-      }
-
-      console.log('[Sidebar] Extracted channel ID:', channelId);
-
-      // Create channel object with proper data
-      const channelData = {
-        channelId: channelId,
-        channelTitle: `Channel ${channelId}`, // Backend will update this
-        thumbnailUrl: null // Backend will provide proper thumbnail
-      };
-
-      // Call parent handler
+      // Show loading indicator
+      toast.show('Resolving channel...', 'info', 2000)
+      
+      // Use the new combined API that handles extraction + addition
+      const result = await rssClient.addChannelFromInput(userInput)
+      
+      console.log('[Sidebar] ✅ Channel added:', result)
+      
+      // Notify parent to refresh channel list
       if (this.onAddChannel) {
-        await this.onAddChannel(channelData);
+        // Just trigger a refresh, don't pass data
+        // The parent (Dashboard) will call fetchTrackedChannels()
+        await this.onAddChannel(null)
       }
+      
+      toast.show('Channel added successfully!', 'success')
+      
     } catch (error) {
-      console.error('[Sidebar] Channel ID extraction error:', error);
-      alert(`Error: ${error.message}\n\nValid examples:\n• UC_x5XG1OV2P6uZZ5FSM9Ttw\n• https://www.youtube.com/channel/UC_x5XG1OV2P6uZZ5FSM9Ttw`);
+      console.error('[Sidebar] Channel addition error:', error)
+      
+      // User-friendly error messages
+      let errorMessage = error.message
+      
+      if (errorMessage.includes('Session expired')) {
+        errorMessage = '🔒 Session expired. Please refresh and login again.'
+      } else if (errorMessage.includes('limit')) {
+        errorMessage = '⚠️ Channel limit reached (5 max for free tier)'
+      } else if (errorMessage.includes('Invalid format')) {
+        errorMessage = '❌ Invalid input. Please use:\n• Channel ID (UCxxxx)\n• Channel URL\n• Video URL'
+      }
+      
+      alert(errorMessage)
     }
   }
 }

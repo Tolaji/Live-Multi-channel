@@ -1,12 +1,13 @@
 // backend/middleware/security.js
+// PRODUCTION-READY CORS configuration
 
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 
-// Rate limiting
+// Rate limiting configurations
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
+  max: 100,
   message: {
     error: 'Too many requests from this IP, please try again later',
     code: 'RATE_LIMIT_EXCEEDED'
@@ -14,14 +15,13 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks and webhooks
     return req.path === '/health' || req.path.startsWith('/webhooks/');
   }
 });
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // More strict for auth endpoints
+  max: 10,
   message: {
     error: 'Too many authentication attempts, please try again later',
     code: 'AUTH_RATE_LIMIT'
@@ -30,15 +30,15 @@ export const authLimiter = rateLimit({
 });
 
 export const webhookLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 50, // Webhooks can be more frequent
+  windowMs: 5 * 60 * 1000,
+  max: 50,
   message: {
     error: 'Too many webhook requests',
     code: 'WEBHOOK_RATE_LIMIT'
   }
 });
 
-// Helmet for security headers
+// Helmet security headers
 export function configureHelmet(app) {
   app.use(helmet({
     contentSecurityPolicy: {
@@ -51,10 +51,11 @@ export function configureHelmet(app) {
           "'self'",
           "https://www.googleapis.com",
           "https://pubsubhubbub.appspot.com",
-          process.env.FRONTEND_URL,
-          "https://live-multi-channel.onrender.com"
+          "https://live-multi-channel.vercel.app",
+          "https://live-multi-channel.onrender.com",
+          "http://localhost:5173",
+          "http://localhost:3000"
         ],
-
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         frameSrc: ["https://www.youtube.com", "https://accounts.google.com"],
         objectSrc: ["'none'"],
@@ -67,52 +68,69 @@ export function configureHelmet(app) {
       includeSubDomains: true,
       preload: true
     },
-    crossOriginEmbedderPolicy: false // Required for YouTube embeds
+    crossOriginEmbedderPolicy: false
   }));
 }
 
-// Input validation
+// Validation helpers
 export function validateChannelId(channelId) {
-  // YouTube channel IDs start with UC and are 24 chars
   const pattern = /^UC[\w-]{22}$/;
   return pattern.test(channelId);
 }
 
 export function validateVideoId(videoId) {
-  // YouTube video IDs are 11 characters
   const pattern = /^[\w-]{11}$/;
   return pattern.test(videoId);
 }
 
-// CORS configuration
-// backend/middleware/security.js
+// CRITICAL: Production-ready CORS configuration
 export const corsOptions = {
   origin: function (origin, callback) {
+    // Define allowed origins based on environment
     const allowedOrigins = [
       'https://live-multi-channel.vercel.app',
       'http://localhost:5173',
       'http://localhost:3000'
     ];
 
-    // Allow requests with no origin (like mobile apps, curl requests)
-    if (!origin) return callback(null, true);
+    // IMPORTANT: Allow requests with no origin (mobile apps, Postman, curl)
+    if (!origin) {
+      console.log('✅ CORS: Allowing request with no origin');
+      return callback(null, true);
+    }
     
+    // Check if origin is allowed
     if (allowedOrigins.includes(origin)) {
+      console.log(`✅ CORS: Allowed origin: ${origin}`);
       callback(null, true);
     } else {
-      console.log(`🚫 Blocked CORS request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      console.log(`🚫 CORS: Blocked origin: ${origin}`);
+      
+      // In development, be more permissive
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️ DEV MODE: Allowing blocked origin anyway');
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
-  credentials: true, // IMPORTANT: This allows cookies/auth headers
+  credentials: true, // CRITICAL: Allow cookies and authorization headers
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-CSRF-Token',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: ['Set-Cookie'],
+  maxAge: 600 // Cache preflight requests for 10 minutes
 };
 
-
-// SQL injection prevention (parameterized queries example)
+// SQL injection prevention
 export async function safeQuery(db, query, params) {
-  // Always use parameterized queries, never string concatenation
   try {
     return await db.query(query, params);
   } catch (error) {
@@ -123,25 +141,33 @@ export async function safeQuery(db, query, params) {
 
 // XSS protection middleware
 export function xssProtection(req, res, next) {
-  // Basic XSS protection by sanitizing user input
   if (req.body) {
     for (let key in req.body) {
       if (typeof req.body[key] === 'string') {
-        req.body[key] = req.body[key].replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        req.body[key] = req.body[key]
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
       }
     }
   }
   next();
 }
 
-// Request logging middleware (enhanced)
+// Enhanced request logging
 export function requestLogger(req, res, next) {
   const start = Date.now();
+  
+  // Log request immediately
+  console.log(`➡️  ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
   
   res.on('finish', () => {
     const duration = Date.now() - start;
     const logLevel = res.statusCode >= 400 ? 'WARN' : 'INFO';
-    console.log(`${new Date().toISOString()} - ${logLevel} - ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms - IP: ${req.ip}`);
+    const emoji = res.statusCode >= 400 ? '❌' : '✅';
+    
+    console.log(
+      `${emoji} ${logLevel} - ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms - IP: ${req.ip}`
+    );
   });
   
   next();

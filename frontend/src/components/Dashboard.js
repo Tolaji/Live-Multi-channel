@@ -24,27 +24,7 @@ export class Dashboard {
     this.onSwitchMode = null
     this.showModeSwitcher = false
     this.socket = null
-    
-    // this.socket = io(apiClient.backendUrl)
-    // this.socket.on('channel-live', (data) => {
-    //   this.liveStatus[data.channelId] = data.status
-    //   this.render()
-    // })
   }
-
-  // async mount(container) {
-  //   if (!container) {
-  //     console.error('[Dashboard] mount failed: container is null')
-  //     return
-  //   }
-  //   this.container = container
-    
-  //   this.render()
-  //   await this.loadChannels()
-  //   this.startLiveStatusPolling()
-  //   this.setupKeyboardShortcuts()
-  //   this.render()
-  // }
 
   async mount(container) {
     if (!container) {
@@ -280,20 +260,19 @@ export class Dashboard {
     this.render()
   }
 
+  // In Dashboard.js, replace the handleAddChannel method with this:
+
   async handleAddChannel(channelData) {
     try {
-      console.log('[Dashboard] Adding channel:', channelData)
-      await rssClient.addChannel(
-        channelData.channelId, 
-        channelData.channelTitle, 
-        channelData.thumbnailUrl
-      )
+      console.log('[Dashboard] Channel addition triggered, refreshing list...')
       
+      // Simply reload the channel list
+      // The Sidebar already handled the addition via rssClient.addChannelFromInput()
       await this.loadChannels()
-      toast.show(`Added channel: ${channelData.channelTitle}`, 'success')
+      
     } catch (error) {
       console.error('[Dashboard] handleAddChannel error:', error)
-      toast.show(`Failed to add channel: ${error.message}`, 'error')
+      toast.show(`Failed to refresh channels: ${error.message}`, 'error')
     }
   }
 
