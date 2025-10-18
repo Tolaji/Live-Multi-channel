@@ -44,25 +44,54 @@ export class Router {
     }
   }
 
+  // frontend/src/core/Router.js
   handleTokenLogin(token) {
-  console.log('[Router] JWT token received, storing...');
-  
-  // Store JWT in localStorage
-  localStorage.setItem('auth_token', token);
-  
-  // Show success toast
-  if (window.toast) {
-    window.toast.show('Successfully signed in!', 'success');
+    console.log('[Router] 🎟️ JWT token received, length:', token?.length);
+    
+    if (!token || token.length < 50) {
+      console.error('[Router] ❌ Invalid token format');
+      window.location.href = '/?auth_error=invalid_token';
+      return;
+    }
+    
+    try {
+      // Decode JWT to verify it's valid (without verification)
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        throw new Error('Invalid JWT format');
+      }
+      
+      const payload = JSON.parse(atob(parts[1]));
+      console.log('[Router] ✅ Token decoded successfully:', {
+        userId: payload.userId,
+        email: payload.email,
+        exp: new Date(payload.exp * 1000).toISOString()
+      });
+      
+    } catch (decodeError) {
+      console.error('[Router] ❌ Token decode failed:', decodeError);
+      window.location.href = '/?auth_error=malformed_token';
+      return;
+    }
+    
+    // Store JWT in localStorage
+    localStorage.setItem('auth_token', token);
+    console.log('[Router] ✅ Token stored in localStorage');
+    
+    // Show success toast
+    if (window.toast) {
+      window.toast.show('Successfully signed in!', 'success');
+    }
+    
+    // Clean URL and reload
+    this.cleanUrl();
+    
+    // Small delay to ensure toast is visible
+    setTimeout(() => {
+      console.log('[Router] 🔄 Reloading to initialize RSS mode...');
+      window.location.reload();
+    }, 1000);
   }
-  
-  // Clean URL and reload to initialize RSS mode
-  this.cleanUrl();
-  
-  // Small delay to ensure toast is visible
-  setTimeout(() => {
-    window.location.reload();
-  }, 1000);
-}
 
   handleAuthError(errorType) {
     console.log('[Router] Auth error detected:', errorType);

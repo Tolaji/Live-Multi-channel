@@ -143,9 +143,18 @@ router.get('/callback', async (req, res) => {
     
     // Redirect to frontend with token
     const redirectUrl = `${frontendUrl}/?token=${jwtToken}&login=success`;
-    console.log(`🔐 [Auth] Redirecting to: ${redirectUrl.split('?')[0]}?token=***&login=success`);
-    
-    res.redirect(redirectUrl);
+    // CRITICAL: Log the exact redirect URL (without exposing full token)
+        console.log('✅ [Auth] Redirecting to frontend:', {
+          url: redirectUrl.substring(0, 60) + '...',
+          tokenLength: jwtToken.length,
+          frontendUrl
+        });    
+    // res.redirect(redirectUrl);
+
+    // Add explicit headers to prevent caching/interception
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.redirect(307, redirectUrl); // 307 = Temporary Redirect (preserve method)
     
   } catch (error) {
     console.error('❌ [Auth] Callback error:', error);
