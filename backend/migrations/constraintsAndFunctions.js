@@ -1,4 +1,4 @@
-// backend/migrations/constraintsAndFunctions.js
+// backend/migrations/constraintsAndFunctions.js - IMPROVED VERSION
 import pg from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -10,8 +10,20 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const { Pool } = pg;
+
+// ✅ More robust SSL configuration
+const isProduction = process.env.NODE_ENV === 'production';
+const isRenderDB = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // ✅ Force SSL for Render, optional for local development
+  ssl: isProduction || isRenderDB ? { 
+    rejectUnauthorized: false 
+  } : false,
+  // ✅ Add connection timeouts
+  connectionTimeoutMillis: 30000,
+  idleTimeoutMillis: 30000,
 });
 
 async function runConstraintsAndFunctions() {
@@ -19,6 +31,8 @@ async function runConstraintsAndFunctions() {
 
   try {
     console.log('🔧 Adding database constraints and functions...');
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'not set'}`);
+    console.log(`🔐 SSL: ${pool.options.ssl ? 'enabled' : 'disabled'}`);
 
     // ✅ Ensure is_active column exists before creating functions
     await client.query(`
@@ -103,10 +117,18 @@ async function runConstraintsAndFunctions() {
     console.log('🎉 Database constraints and functions added successfully!');
   } catch (error) {
     console.error('❌ Error adding constraints/functions:', error);
+    // ✅ More specific error handling
+    if (error.code === 'ECONNRESET') {
+      console.error('💡 Connection reset - check SSL configuration and database URL');
+    }
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-runConstraintsAndFunctions();
+// ✅ Add error handling for the main execution
+runConstraintsAndFunctions().catch(error => {
+  console.error('❌ Fatal error:', error);
+  process.exit(1);
+});

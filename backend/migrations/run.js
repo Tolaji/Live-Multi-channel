@@ -1,4 +1,4 @@
-// backend/migrations/run.js
+// backend/migrations/run.js - FIXED
 import pg from 'pg';
 import dotenv from 'dotenv';
 
@@ -8,7 +8,11 @@ const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  connectionTimeoutMillis: 10000,
+  // ✅ Add SSL configuration
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : false,
+  connectionTimeoutMillis: 30000, // Increased timeout
   idleTimeoutMillis: 30000,
 });
 
@@ -16,7 +20,7 @@ async function runMigrations() {
   const client = await pool.connect();
 
   try {
-    console.log('🗄️  Running database migrations...');
+    console.log('🗄️ Running database migrations...');
     await client.query('BEGIN');
 
     // Users table

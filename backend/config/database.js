@@ -1,3 +1,4 @@
+// backend/database.js - FIXED VERSION
 import pg from 'pg';
 import dotenv from 'dotenv';
 
@@ -5,21 +6,19 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Create connection pool
+// Create connection pool with conditional SSL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Or use individual properties if DATABASE_URL not set:
-  // host: process.env.DB_HOST || 'localhost',
-  // port: process.env.DB_PORT || 5432,
-  // database: process.env.DB_NAME || 'livemultichannel',
-  // user: process.env.DB_USER || 'lmc_user',
-  // password: process.env.DB_PASSWORD,
+  // ✅ Conditional SSL - only in production
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : false,
   
   // Connection pool settings
-  max: 20, // Maximum number of clients in pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 10000, // Return error after 2 seconds if connection fails
-  maxUses: 7500 // Recycle clients after 7500 queries
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  maxUses: 7500
 });
 
 // Test connection on startup

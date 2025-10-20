@@ -10,7 +10,13 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 const { Pool } = pg;
+// In ALL migration files (run.js, constraintsAndFunctions.js, etc.)
 const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // ✅ Add this SSL configuration:
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : false,
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
   user: process.env.DB_USER,
