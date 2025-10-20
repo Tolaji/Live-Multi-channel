@@ -10,8 +10,9 @@
     "db:constraints": "node migrations/constraintsAndFunctions.js",
     "db:setup": "npm run db:migrate && npm run db:constraints",
     "db:fixTables": "node migrations/fixTables.js",
-    "db:verifyMigration": "node migrations/verifyMigration.js",
-    "db:addUserTrackedChannels": "node migrations/addUserTrackedChannels.js"
+    "db:verify": "node migrations/verifyMigration.js",
+    "db:debug": "node migrations/debugMigrations.js",
+    "db:test": "node migrations/testConnection.js"
   },
   "keywords": [],
   "author": "",

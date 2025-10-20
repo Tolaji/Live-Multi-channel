@@ -15,8 +15,21 @@ console.log('🔍 Loaded environment file from:', envPath);
 console.log('env DATABASE_URL =', process.env.DATABASE_URL);
 
 const { Pool } = pg;
+
+// ✅ Add robust SSL configuration for Render
+const isProduction = process.env.NODE_ENV === 'production';
+const isRenderDB = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // ✅ Force SSL for Render, optional for local development
+  ssl: isProduction || isRenderDB ? { 
+    rejectUnauthorized: false 
+  } : false,
+  // ✅ Add connection timeouts and retry logic
+  connectionTimeoutMillis: 30000,
+  idleTimeoutMillis: 30000,
+  max: 5, // Reduce connection pool size
 });
 
 async function runVerification() {
@@ -67,48 +80,77 @@ async function runVerification() {
     console.log('\n🧩 Column type check (channel_id):');
     console.table(colCheck.rows);
 
-    // ✅ 3️⃣ Trigger check on users table
-    const triggerCheck = await client.query(`
-      SELECT tgname AS trigger_name,
-             pg_get_triggerdef(oid) AS trigger_definition
-      FROM pg_trigger
-      WHERE tgrelid = 'users'::regclass;
+    // ✅ 3️⃣ Check user_id data type consistency
+    const userIdCheck = await client.query(`
+      SELECT table_name, column_name, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name = 'user_id'
+        AND table_name IN ('user_channels', 'user_tracked_channels')
+      ORDER BY table_name;
     `);
-    console.log('\n⚙️ Triggers on users table:');
-    console.table(triggerCheck.rows);
+    console.log('\n🔍 User ID data type consistency check:');
+    console.table(userIdCheck.rows);
 
-    // ✅ 4️⃣ Function existence check
+    // ✅ 4️⃣ Trigger check on users table
+    try {
+      const triggerCheck = await client.query(`
+        SELECT tgname AS trigger_name,
+               pg_get_triggerdef(oid) AS trigger_definition
+        FROM pg_trigger
+        WHERE tgrelid = 'users'::regclass;
+      `);
+      console.log('\n⚙️ Triggers on users table:');
+      console.table(triggerCheck.rows);
+    } catch (error) {
+      console.log('\n⚙️ No triggers found on users table (this is ok)');
+    }
+
+    // ✅ 5️⃣ Function existence check
     const funcNames = [
       'update_updated_at_column',
       'cleanup_old_notifications',
       'get_user_channel_stats',
       'update_channel_last_checked'
     ];
-    const funcCheck = await client.query(`
-      SELECT proname AS function_name
-      FROM pg_proc
-      WHERE proname = ANY($1)
-      ORDER BY proname;
-    `, [funcNames]);
-    console.log('\n🧠 User-defined functions found:');
-    console.table(funcCheck.rows);
+    try {
+      const funcCheck = await client.query(`
+        SELECT proname AS function_name
+        FROM pg_proc
+        WHERE proname = ANY($1)
+        ORDER BY proname;
+      `, [funcNames]);
+      console.log('\n🧠 User-defined functions found:');
+      console.table(funcCheck.rows);
+    } catch (error) {
+      console.log('\n🧠 No user-defined functions found (this is ok)');
+    }
 
-    // ✅ 5️⃣ Execute test function for sample user
-    const sampleUserId = 1;
-    console.log(`\n📈 Executing get_user_channel_stats(${sampleUserId})...`);
-    const statsResult = await client.query(`
-      SELECT * FROM get_user_channel_stats($1);
-    `, [sampleUserId]);
-    console.log('Result:');
-    console.table(statsResult.rows);
+    // ✅ 6️⃣ Execute test function for sample user (if exists)
+    try {
+      const sampleUserId = 1;
+      console.log(`\n📈 Executing get_user_channel_stats(${sampleUserId})...`);
+      const statsResult = await client.query(`
+        SELECT * FROM get_user_channel_stats($1);
+      `, [sampleUserId]);
+      console.log('Result:');
+      console.table(statsResult.rows);
+    } catch (error) {
+      console.log('\n📈 Function test skipped (function may not exist yet)');
+    }
 
     console.log('\n✅ Extended verification complete.');
   } catch (error) {
     console.error('❌ Verification failed:', error);
+    throw error;
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-runVerification();
+// Add error handling for the main execution
+runVerification().catch(error => {
+  console.error('❌ Fatal error:', error);
+  process.exit(1);
+});

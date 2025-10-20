@@ -11,17 +11,20 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 
 const { Pool } = pg;
 // In ALL migration files (run.js, constraintsAndFunctions.js, etc.)
+// ✅ Add robust SSL configuration for Render
+const isProduction = process.env.NODE_ENV === 'production';
+const isRenderDB = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // ✅ Add this SSL configuration:
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false
+  // ✅ Force SSL for Render, optional for local development
+  ssl: isProduction || isRenderDB ? { 
+    rejectUnauthorized: false 
   } : false,
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  // ✅ Add connection timeouts
+  connectionTimeoutMillis: 30000,
+  idleTimeoutMillis: 30000,
+  max: 5,
 });
 
 const expectedTables = [
@@ -35,7 +38,7 @@ const expectedTables = [
   'user_settings'
 ];
 
-async function ensureTables(client) {
+export async function ensureTables(client) {
   console.log('🧩 Ensuring all expected tables exist...');
   const res = await client.query(`
     SELECT table_name 
@@ -101,7 +104,7 @@ async function ensureTables(client) {
   }
 }
 
-async function normalizeChannelIds(client) {
+export async function normalizeChannelIds(client) {
   console.log('🔍 Checking for malformed channel IDs...');
   const tables = ['user_channels', 'live_events', 'notifications'];
 
@@ -136,7 +139,7 @@ async function normalizeChannelIds(client) {
   }
 }
 
-async function fixChannelIds() {
+export async function fixChannelIds() {
   const client = await pool.connect();
   try {
     console.log('🔧 Starting table verification and channel_id fix...');

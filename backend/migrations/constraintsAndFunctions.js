@@ -26,7 +26,7 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
-async function runConstraintsAndFunctions() {
+export async function runConstraintsAndFunctions() {
   const client = await pool.connect();
 
   try {
