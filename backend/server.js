@@ -8,9 +8,10 @@ import passport from 'passport';
 
 import session from 'express-session';
 import { createClient } from 'redis';
-import { RedisStore } from 'connect-redis'; // <-- FIX HERE
+import { RedisStore } from 'connect-redis';
 import cookieParser from 'cookie-parser';
-
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';  
 
 
 // Import configurations
@@ -58,10 +59,29 @@ socketService.setIO(io);
 
 const PORT = process.env.PORT || 3000;
 
+// ========================================
+// Trust Proxy
+// ========================================
+// This MUST come BEFORE any middleware
+const trustProxy = process.env.TRUST_PROXY === 'true' || 
+                   process.env.NODE_ENV === 'production';
+
+if (trustProxy) {
+  app.set('trust proxy', 1); // Trust first proxy (Render/Vercel)
+  console.log('✅ Trust proxy: ENABLED');
+} else {
+  app.set('trust proxy', false);
+  console.log('⚠️ Trust proxy: DISABLED (development)');
+}
+
 // ========== MIDDLEWARE SETUP ==========
 
 // Security middleware
 configureHelmet(app);
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for now (can enable later)
+  crossOriginEmbedderPolicy: false
+}));
 app.use(cors(corsOptions));
 app.use(requestLogger);
 
@@ -71,7 +91,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Create Redis client for sessions
 const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
+  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  socket: {
+    reconnectStrategy: (retries) => {
+      if (retries > 10) return new Error('Redis reconnection failed');
+      return Math.min(retries * 50, 500);
+    }
+  }
 });
 
 // Initialize Redis client
@@ -104,9 +130,30 @@ app.use(session({
   proxy: true // Trust proxy in production
 }));
 
-// Rate limiting
+// ========================================
+// Rate Limiting
+// ========================================
 app.use(apiLimiter);
 app.use('/auth', authLimiter);
+
+// Configure rate limiter to work with proxies
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Max 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  // ✅ Key generator that works with proxies
+  keyGenerator: (req) => {
+    // Use X-Forwarded-For if available, otherwise req.ip
+    return req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
+  },
+  skip: (req) => {
+    // Skip rate limiting for health checks and webhooks
+    return req.path === '/health' || req.path.startsWith('/webhooks/');
+  }
+});
+
+app.use(limiter);
 
 // CSRF protection - ONLY for non-API routes, EXCEPT /api/csrf-token
 const csrfMiddleware = (req, res, next) => {
